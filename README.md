@@ -19,6 +19,7 @@ cp .env.example .env
 docker compose up -d --wait db
 python3.12 -m venv .venv
 source .venv/bin/activate
+python -m pip install -r backend/requirements.lock
 python -m pip install -e './backend[dev]'
 cd backend
 alembic upgrade head
@@ -53,6 +54,11 @@ and the port in `.env`'s `DATABASE_URL` together.
 5. Select the task for Today. This does not change its deadline or scheduled date.
 6. Complete it from Today or Tasks. Completed tasks can be reopened.
 
+Converted inbox captures retain their original text and become read-only; edit
+the resulting task instead. They can still be archived, restored, or deleted.
+Deleting a task does not delete its source capture, and retrying conversion
+cannot create a duplicate task.
+
 Today keeps at most three manually selected priorities. Earlier unfinished work
 is offered separately: nothing is marked failed, automatically carried forward,
 or silently rescheduled. Calendar, Projects, and Notes & Books are explicitly
@@ -68,6 +74,8 @@ The backend refuses production operation until real authentication is added.
 
 - `APP_ENV=development`: explicitly enables the development-only context.
 - `DATABASE_URL`: SQLAlchemy PostgreSQL URL using the `psycopg` driver.
+- `POSTGRES_PASSWORD`: also supplies the local connection password when the
+  database URL does not include one.
 - `USER_TIMEZONE`: initial IANA timezone, such as `America/New_York` or `UTC`.
 - `CORS_ORIGINS`: comma-separated local frontend origins.
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: Docker database settings.
@@ -90,10 +98,64 @@ it does not implement Supabase Auth or claim Supabase RLS provides API ownership
 
 ## Structure
 
-- `frontend/`: React, TypeScript, Vite, Tailwind, shadcn/ui-style accessible
+- `frontend/`: React, TypeScript, Vite, Tailwind, shadcn/ui accessible
   components, Lucide icons, React Router, and TanStack Query.
 - `backend/`: FastAPI, Pydantic, SQLAlchemy 2, Alembic migrations, and pytest.
 - `docker-compose.yml`: loopback-only PostgreSQL with persistent storage.
+
+## Checks
+
+With the Python environment activated, run the backend checks from `backend`:
+
+```bash
+ruff check .
+pytest
+```
+
+Run the frontend checks from `frontend`:
+
+```bash
+npm run lint
+npm run test
+npm run build
+```
+
+The production build includes TypeScript compilation. PostgreSQL-specific test
+configuration and the results verified for this milestone are recorded below.
+
+### PostgreSQL-backed tests
+
+The default pytest run uses an isolated, migrated SQLite database and skips
+PostgreSQL-only concurrency cases. To exercise PostgreSQL too, create a separate
+test database once, from the repository root:
+
+```bash
+docker compose exec -T db createdb -U executive executive_function_test
+cd backend
+set -a
+source ../.env
+set +a
+PGPASSWORD="$POSTGRES_PASSWORD" \
+  TEST_DATABASE_URL="postgresql+psycopg://executive@127.0.0.1:5432/executive_function_test" \
+  pytest
+```
+
+This command assumes the example local username and port; adjust them if you
+changed your local configuration. Tests migrate isolated schemas and remove
+them afterward. Use a disposable test database, never a production connection.
+
+### Verified for MVP 0.1
+
+- PostgreSQL 17: **36 backend tests passed**, including ownership, concurrent
+  conversion/priority updates, migration preservation, and commit-failure rollback.
+- SQLite fallback: **34 passed, 2 PostgreSQL-only concurrency tests skipped**.
+- Frontend: **28 interaction tests passed**, also run in Los Angeles and
+  Kiritimati timezones; TypeScript, lint, and production build passed.
+- Docker Compose startup, Alembic upgrade/schema checks, and actual API startup
+  succeeded. Dependency advisory scans and frontend audit reported no findings.
+- Manual browser verification completed the capture → refresh → conversion →
+  next action → Today selection → completion → refresh flow against PostgreSQL.
+  Original capture text and independent task dates remained preserved.
 
 ## Remaining work, in priority order
 
