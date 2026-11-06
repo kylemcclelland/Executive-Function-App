@@ -8,7 +8,19 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from ..core.config import DEFAULT_USER_ID
-from ..models import InboxItem, Step, Task, User
+from ..models import (
+    Book,
+    InboxItem,
+    Milestone,
+    Note,
+    NoteLink,
+    Project,
+    ProjectNote,
+    Step,
+    Task,
+    User,
+    WorkSession,
+)
 
 
 def get_session(request: Request):
@@ -59,3 +71,62 @@ def owned_step(db: Session, user: User, task_id: UUID, step_id: UUID) -> tuple[T
     if step is None:
         raise HTTPException(404, "Step not found")
     return task, step
+
+
+def owned_project(db: Session, user: User, project_id: UUID) -> Project:
+    project = db.scalar(
+        select(Project).where(Project.id == project_id, Project.user_id == user.id)
+    )
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    return project
+
+
+def owned_milestone(db: Session, user: User, project_id: UUID, milestone_id: UUID) -> Milestone:
+    milestone = db.scalar(select(Milestone).where(
+        Milestone.id == milestone_id, Milestone.project_id == project_id,
+        Milestone.user_id == user.id,
+    ))
+    if milestone is None:
+        raise HTTPException(404, "Milestone not found")
+    return milestone
+
+
+def owned_note(db: Session, user: User, project_id: UUID, note_id: UUID) -> ProjectNote:
+    note = db.scalar(select(ProjectNote).where(
+        ProjectNote.id == note_id, ProjectNote.project_id == project_id,
+        ProjectNote.user_id == user.id,
+    ))
+    if note is None:
+        raise HTTPException(404, "Note not found")
+    return note
+
+
+def owned_work_session(db: Session, user: User, session_id: UUID) -> WorkSession:
+    work_session = db.scalar(
+        select(WorkSession).where(WorkSession.id == session_id, WorkSession.user_id == user.id)
+    )
+    if work_session is None:
+        raise HTTPException(404, "Work session not found")
+    return work_session
+
+
+def owned_book(db: Session, user: User, book_id: UUID) -> Book:
+    book = db.scalar(select(Book).where(Book.id == book_id, Book.user_id == user.id))
+    if book is None:
+        raise HTTPException(404, "Book not found")
+    return book
+
+
+def owned_library_note(db: Session, user: User, note_id: UUID) -> Note:
+    note = db.scalar(select(Note).where(Note.id == note_id, Note.user_id == user.id))
+    if note is None:
+        raise HTTPException(404, "Note not found")
+    return note
+
+
+def owned_note_link(db: Session, user: User, link_id: UUID) -> NoteLink:
+    link = db.scalar(select(NoteLink).where(NoteLink.id == link_id, NoteLink.user_id == user.id))
+    if link is None:
+        raise HTTPException(404, "Connection not found")
+    return link

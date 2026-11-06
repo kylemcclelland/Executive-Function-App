@@ -15,6 +15,15 @@ from pydantic import (
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 Content = Annotated[str, StringConstraints(min_length=1, max_length=100000)]
 Status = Literal["todo", "in_progress", "completed"]
+ProjectStatus = Literal["active", "paused", "someday", "completed"]
+Intention = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+def blank_to_none(value):
+    """Optional text fields treat blank input as "not set"."""
+    if isinstance(value, str):
+        return value.strip() or None
+    return value
 
 
 class Input(BaseModel):
@@ -27,6 +36,7 @@ class Output(BaseModel):
 
 class TaskCreate(Input):
     project_id: UUID | None = None
+    milestone_id: UUID | None = None
     title: Title
     description: str | None = Field(default=None, max_length=100000)
     status: Status = "todo"
@@ -38,6 +48,7 @@ class TaskCreate(Input):
 
 class TaskPatch(Input):
     project_id: UUID | None = None
+    milestone_id: UUID | None = None
     title: Title | None = None
     description: str | None = Field(default=None, max_length=100000)
     status: Status | None = None
@@ -83,6 +94,9 @@ class TaskOut(Output):
     id: UUID
     user_id: UUID
     project_id: UUID | None
+    project_name: str | None
+    milestone_id: UUID | None
+    project_position: int | None
     title: str
     description: str | None
     status: Status
@@ -151,6 +165,14 @@ class PrioritiesInput(Input):
         return value
 
 
+class ProjectBrief(Output):
+    id: UUID
+    name: str
+    next_action: str | None
+    next_task_title: str | None
+    open_task_count: int
+
+
 class TodayOut(Output):
     date: date
     timezone: str
@@ -158,6 +180,216 @@ class TodayOut(Output):
     previous_tasks: list[TaskOut]
     completed_tasks: list[TaskOut]
     inbox_count: int
+    active_projects: list[ProjectBrief] = []
+
+
+class ProjectCreate(Input):
+    name: Title
+    description: str | None = Field(default=None, max_length=100000)
+    category: str | None = Field(default=None, max_length=100)
+    status: ProjectStatus = "active"
+    target_date: date | None = None
+    next_action: str | None = Field(default=None, max_length=2000)
+
+    _blank = field_validator("description", "category", "next_action", mode="before")(blank_to_none)
+
+
+class ProjectPatch(Input):
+    name: Title | None = None
+    description: str | None = Field(default=None, max_length=100000)
+    category: str | None = Field(default=None, max_length=100)
+    status: ProjectStatus | None = None
+    target_date: date | None = None
+    next_action: str | None = Field(default=None, max_length=2000)
+    archived: bool | None = None
+
+    _blank = field_validator("description", "category", "next_action", mode="before")(blank_to_none)
+
+    @model_validator(mode="after")
+    def non_null_required(self):
+        for field in ("name", "status", "archived"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
+class ProjectOut(Output):
+    id: UUID
+    user_id: UUID
+    name: str
+    description: str | None
+    category: str | None
+    status: ProjectStatus
+    target_date: date | None
+    next_action: str | None
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    archived_at: datetime | None
+    open_task_count: int
+    completed_task_count: int
+    milestone_count: int
+    milestones_completed: int
+    next_task_title: str | None
+
+
+class ProjectUpdateCreate(Input):
+    kind: Literal["progress", "session"] = "session"
+    summary: Content
+    next_step: str | None = Field(default=None, max_length=2000)
+
+    _blank = field_validator("next_step", mode="before")(blank_to_none)
+
+    @field_validator("summary")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Summary cannot be blank")
+        return value.strip()
+
+
+class ProjectUpdateOut(Output):
+    id: UUID
+    project_id: UUID
+    kind: Literal["progress", "session"]
+    summary: str
+    next_step: str | None
+    created_at: datetime
+
+
+class WorkSessionCreate(Input):
+    project_id: UUID
+    task_id: UUID | None = None
+    intention: Intention
+    planned_minutes: int | None = Field(default=None, gt=0, le=480)
+
+
+class WorkSessionFinish(Input):
+    accomplished: str | None = Field(default=None, max_length=100000)
+    resume_note: str | None = Field(default=None, max_length=100000)
+    interrupted: bool = False
+
+    _blank = field_validator("accomplished", "resume_note", mode="before")(blank_to_none)
+
+
+class WorkSessionOut(Output):
+    id: UUID
+    project_id: UUID
+    project_name: str
+    task_id: UUID | None
+    task_title: str | None
+    intention: str
+    status: Literal["active", "finished", "interrupted"]
+    started_at: datetime
+    ended_at: datetime | None
+    planned_minutes: int | None
+    elapsed_seconds: int | None
+    accomplished: str | None
+    resume_note: str | None
+
+
+class ProjectDetailOut(ProjectOut):
+    last_update: ProjectUpdateOut | None
+    last_session: WorkSessionOut | None = None
+    resume_session: WorkSessionOut | None = None
+
+
+class ProjectTaskIds(Input):
+    task_ids: list[UUID] = Field(max_length=500)
+
+    @field_validator("task_ids")
+    @classmethod
+    def unique_tasks(cls, value):
+        if len(set(value)) != len(value):
+            raise ValueError("Tasks must be unique")
+        return value
+
+
+class MilestoneCreate(Input):
+    title: Title
+    description: str | None = Field(default=None, max_length=100000)
+    target_date: date | None = None
+
+    _blank = field_validator("description", mode="before")(blank_to_none)
+
+
+class MilestonePatch(Input):
+    title: Title | None = None
+    description: str | None = Field(default=None, max_length=100000)
+    target_date: date | None = None
+    completed: bool | None = None
+
+    _blank = field_validator("description", mode="before")(blank_to_none)
+
+    @model_validator(mode="after")
+    def non_null_required(self):
+        for field in ("title", "completed"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
+class MilestoneOut(Output):
+    id: UUID
+    project_id: UUID
+    title: str
+    description: str | None
+    target_date: date | None
+    position: int
+    completed_at: datetime | None
+    task_count: int
+    completed_task_count: int
+
+
+class NoteCreate(Input):
+    title: Title | None = None
+    content: Content
+
+    _blank = field_validator("title", mode="before")(blank_to_none)
+
+    @field_validator("content")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Content cannot be blank")
+        return value
+
+
+class NotePatch(Input):
+    title: Title | None = None
+    content: Content | None = None
+
+    _blank = field_validator("title", mode="before")(blank_to_none)
+
+    @field_validator("content")
+    @classmethod
+    def not_blank(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("Content cannot be blank")
+        return value
+
+    @model_validator(mode="after")
+    def content_not_null(self):
+        if "content" in self.model_fields_set and self.content is None:
+            raise ValueError("content cannot be null")
+        return self
+
+
+class NoteOut(Output):
+    id: UUID
+    project_id: UUID
+    title: str | None
+    content: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class HistoryEntry(Output):
+    id: UUID
+    type: Literal["task_completed", "milestone_completed", "progress", "session"]
+    at: datetime
+    title: str
+    next_step: str | None = None
 
 
 class UserPatch(Input):

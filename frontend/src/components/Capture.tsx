@@ -14,10 +14,10 @@ export function Capture() {
     if (!content.trim()) return
     void action.run(() => api('/inbox', 'POST', { content: content.trim() }), () => { setContent(''); setSaved(true) })
   }
-  return <Card className="capture-card"><div className="section-title"><span className="small-icon"><Sparkles size={18} /></span><h2>A little less on your mind</h2></div>
-    <p className="muted">A thought, a to-do, a “don’t forget.” Put it here. Sort it out later.</p>
+  return <Card className="capture-card"><div className="section-title"><span className="small-icon"><Sparkles size={18} /></span><h2>Set it down</h2></div>
+    <p className="muted">A thought, a to-do, a reminder. Write it here and sort it out later.</p>
     <form onSubmit={submit} className="capture-form"><Input aria-label="Capture a thought" placeholder="What’s on your mind?" value={content} disabled={action.pending} maxLength={10000} onChange={event => { setContent(event.target.value); setSaved(false) }} />
       <Button disabled={action.pending || !content.trim()}><Plus size={17} />{action.pending ? 'Saving…' : 'Capture'}</Button></form>
-    <div aria-live="polite">{saved && <p className="success-message"><Check size={14} /> Safely in your inbox. You can let it go for now.</p>}</div><ErrorMessage message={action.error} />
+    <div aria-live="polite">{saved && <p className="success-message"><Check size={14} /> Saved to your inbox. You can let it go for now.</p>}</div><ErrorMessage message={action.error} />
   </Card>
 }

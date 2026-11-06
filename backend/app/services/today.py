@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import utcnow
 from ..models import DailyPriority, InboxItem, Task, User
+from .projects import active_briefs
 
 
 def today_view(db: Session, user: User) -> dict:
@@ -46,4 +47,5 @@ def today_view(db: Session, user: User) -> dict:
     return {
         "date": today, "timezone": user.timezone, "priorities": priorities,
         "previous_tasks": previous, "completed_tasks": completed, "inbox_count": inbox_count,
+        "active_projects": active_briefs(db, user),
     }

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Leaf, LoaderCircle } from 'lucide-react'
+import { Feather, LoaderCircle } from 'lucide-react'
 import { useAction } from '../hooks/useAction'
 import { Button, Dialog } from './ui'
 
@@ -8,11 +8,11 @@ export function ErrorMessage({ message }: { message: string }) {
 }
 
 export function Loading() {
-  return <div className="loading" role="status"><LoaderCircle className="spin" size={22} /> Finding your place…</div>
+  return <div className="loading" role="status"><LoaderCircle className="spin" size={22} /> Loading…</div>
 }
 
 export function Empty({ title, children }: { title: string; children: ReactNode }) {
-  return <div className="empty"><span className="empty-icon"><Leaf size={24} /></span><h3>{title}</h3><p>{children}</p></div>
+  return <div className="empty"><span className="empty-icon"><Feather size={24} /></span><h3>{title}</h3><p>{children}</p></div>
 }
 
 export function PageHeader({ eyebrow, title, children, action }: { eyebrow: string; title: string; children: ReactNode; action?: ReactNode }) {

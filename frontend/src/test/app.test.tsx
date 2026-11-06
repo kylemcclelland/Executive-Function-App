@@ -9,7 +9,7 @@ import type { InboxItem, Task } from '../types'
 import { formatDate } from '../lib/utils'
 
 const task = (id: string, title: string, fields: Partial<Task> = {}): Task => ({
-  id, title, user_id: 'user', project_id: null, description: null, status: 'todo',
+  id, title, user_id: 'user', project_id: null, project_name: null, milestone_id: null, project_position: null, description: null, status: 'todo',
   due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null,
   created_at: '2026-11-06T10:00:00Z', updated_at: '2026-11-06T10:00:00Z', completed_at: null, steps: [], ...fields,
 })
@@ -116,12 +116,12 @@ const writes = () => requests.filter(r => r.method !== 'GET')
 describe('Today is intentional, not automatic', () => {
   it('starts empty, captures thoughts without creating tasks, and never auto-picks tasks', async () => {
     const user = setup()
-    await screen.findByText('What deserves a little space today?')
+    await screen.findByText('Choose your priorities')
     expect(writes()).toHaveLength(0)
     expect(screen.queryByRole('button', { name: 'Write the first paragraph' })).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Capture a thought' }), ' Remember the library book ')
     await user.click(screen.getByRole('button', { name: 'Capture' }))
-    await screen.findByText(/Safely in your inbox/)
+    await screen.findByText(/Saved to your inbox/)
     expect(writes()).toEqual([{ url: '/inbox', method: 'POST', body: { content: 'Remember the library book' } }])
     expect(screen.getByRole('textbox', { name: 'Capture a thought' })).toHaveValue('')
     expect(tasks).toHaveLength(5)
@@ -147,7 +147,7 @@ describe('Today is intentional, not automatic', () => {
   it('carries previous incomplete choices only on explicit request', async () => {
     previous = ['b']
     const user = setup()
-    await screen.findByText('A fresh choice, not a backlog')
+    await screen.findByText('Earlier tasks')
     expect(priorities).toEqual([])
     expect(writes()).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Bring to today' }))
@@ -158,7 +158,7 @@ describe('Today is intentional, not automatic', () => {
     tasks.push(task('e', 'A fifth earlier task'))
     previous = ['a', 'b', 'c', 'd', 'e']
     const user = setup()
-    await screen.findByText('A fresh choice, not a backlog')
+    await screen.findByText('Earlier tasks')
     expect(screen.getAllByRole('button', { name: 'Bring to today' })).toHaveLength(3)
     expect(screen.getByText('Showing 3 of 5 earlier tasks. Nothing has been changed.')).toBeInTheDocument()
     expect(screen.queryByText('Water the plants')).not.toBeInTheDocument()
@@ -217,7 +217,7 @@ describe('Today is intentional, not automatic', () => {
     const user = setup()
     await user.click(await screen.findByRole('button', { name: 'Complete task: Write the first paragraph' }))
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Complete task: Write the first paragraph' })).not.toBeInTheDocument())
-    await user.click(screen.getByText('A little progress (2)'))
+    await user.click(screen.getByText('Completed today (2)'))
     await user.click(screen.getByRole('button', { name: 'Reopen task: Write the first paragraph' }))
     await screen.findByRole('button', { name: 'Complete task: Write the first paragraph' })
     expect(tasks[0].status).toBe('todo')
@@ -313,7 +313,7 @@ describe('Inbox lifecycle', () => {
     expect(screen.getByRole('textbox', { name: 'Capture a thought' })).toHaveValue('Please keep these words')
     failPath = ''
     await user.click(screen.getByRole('button', { name: 'Capture' }))
-    await screen.findByText(/Safely in your inbox/)
+    await screen.findByText(/Saved to your inbox/)
   })
 })
 
@@ -426,12 +426,12 @@ describe('Preferences, dates, and resilient navigation', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     await screen.findByRole('button', { name: 'Write the first paragraph' })
   })
-  it.each(['/calendar', '/projects', '/notes'])('labels %s explicitly as a later milestone', async path => {
+  it.each(['/calendar'])('labels %s explicitly as a later milestone', async path => {
     const user = setup(path)
     expect(screen.getByText('Later milestone')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('link', { name: 'Back to today' }))
-    await screen.findByRole('heading', { name: 'A little focus. A little breathing room.' })
+    await user.click(screen.getByRole('link', { name: 'Back to Today' }))
+    await screen.findByRole('heading', { name: 'Today' })
   })
   it('handles empty 204 responses without parsing JSON', async () => {
     await expect(api('/tasks/a', 'DELETE')).resolves.toBeUndefined()

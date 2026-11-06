@@ -8,10 +8,19 @@ from sqlalchemy import delete, select, text
 from ... import schemas as s
 from ...db import utcnow
 from ...models import DailyPriority, InboxItem, Step, Task
+from ...services.projects import link_values, touch_project
 from ...services.today import today_view
 from ..dependencies import DB, CurrentUser, owned_inbox, owned_step, owned_task
+from .books import router as books_router
+from .notes import router as notes_router
+from .projects import router as projects_router
+from .work_sessions import router as work_sessions_router
 
 router = APIRouter()
+router.include_router(projects_router)
+router.include_router(books_router)
+router.include_router(notes_router)
+router.include_router(work_sessions_router)
 
 
 @router.get("/health")
@@ -45,12 +54,16 @@ def list_tasks(db: DB, user: CurrentUser, status: s.Status | None = None):
 
 @router.post("/api/tasks", response_model=s.TaskOut, status_code=201)
 def create_task(body: s.TaskCreate, db: DB, user: CurrentUser):
+    values = body.model_dump()
+    values.update(link_values(db, user, values))
     task = Task(
-        **body.model_dump(), user_id=user.id,
+        **values, user_id=user.id,
         completed_at=utcnow() if body.status == "completed" else None,
     )
     db.add(task)
+    touch_project(db, task.project_id)
     db.flush()
+    db.refresh(task, ["project"])
     return task
 
 
@@ -65,9 +78,14 @@ def update_task(task_id: UUID, body: s.TaskPatch, db: DB, user: CurrentUser):
     values = body.model_dump(exclude_unset=True)
     if "status" in values and values["status"] != task.status:
         task.completed_at = utcnow() if values["status"] == "completed" else None
+    previous_project = task.project_id
+    values.update(link_values(db, user, values, task.project_id, task.milestone_id))
     for key, value in values.items():
         setattr(task, key, value)
+    touch_project(db, previous_project)
+    touch_project(db, task.project_id)
     db.flush()
+    db.refresh(task, ["project"])
     return task
 
 

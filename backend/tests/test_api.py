@@ -36,7 +36,7 @@ def test_health_and_local_cors(client):
 
 
 def test_task_crud_all_fields_completion_and_reopen(client):
-    project = str(uuid4())
+    project = client.post("/api/projects", json={"name": "Lunch"}).json()["id"]
     created = task(
         client, "  Plan lunch  ", project_id=project, description="Details",
         due_date="2026-11-08", scheduled_date="2026-11-07",

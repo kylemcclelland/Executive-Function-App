@@ -4,7 +4,22 @@ from alembic import context
 
 from app.core.config import Settings
 from app.db import Base, make_engine
-from app.models import DailyPriority, InboxItem, Step, Task, User  # noqa: F401
+from app.models import (  # noqa: F401
+    Book,
+    DailyPriority,
+    InboxItem,
+    Milestone,
+    Note,
+    NoteLink,
+    NoteTag,
+    Project,
+    ProjectNote,
+    ProjectUpdate,
+    Step,
+    Task,
+    User,
+    WorkSession,
+)
 
 config = context.config
 if config.config_file_name is not None:

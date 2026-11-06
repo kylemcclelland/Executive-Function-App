@@ -5,13 +5,13 @@ export function useAction() {
   const client = useQueryClient()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
-  async function run(action: () => Promise<unknown>, onSuccess?: () => void) {
+  async function run<T>(action: () => Promise<T>, onSuccess?: (result: T) => void) {
     setPending(true)
     setError('')
     try {
-      await action()
+      const result = await action()
       await client.invalidateQueries()
-      onSuccess?.()
+      onSuccess?.(result)
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Something went wrong. Please try again.')
     } finally { setPending(false) }
