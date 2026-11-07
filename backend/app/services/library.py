@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import Book, Note, NoteLink
+from ..models import Book, Note, NoteLink, NoteTag
 
 # "Related to" and "Contradicts" are mutual. Supports, Develops and Responds to have a
 # direction: "A develops B" says nothing about whether B develops A.
@@ -14,12 +14,41 @@ MAX_TAG_LENGTH = 50
 
 
 def normalize_tags(tags: list[str]) -> list[str]:
-    seen: dict[str, None] = {}
+    """Trim, collapse spaces and drop a leading #. Capitalization is kept as typed; tags that
+    differ only by case or surrounding whitespace are duplicates (the first spelling wins)."""
+    seen: dict[str, str] = {}
     for raw in tags:
-        tag = re.sub(r"\s+", " ", raw.strip().lstrip("#").strip()).lower()
+        tag = re.sub(r"\s+", " ", raw.strip().lstrip("#").strip())[:MAX_TAG_LENGTH].strip()
         if tag:
-            seen.setdefault(tag[:MAX_TAG_LENGTH])
-    return list(seen)[:MAX_TAGS]
+            seen.setdefault(tag.casefold(), tag)
+    return list(seen.values())[:MAX_TAGS]
+
+
+def tag_catalog(db: Session, user_id: UUID) -> dict[str, dict]:
+    """Every tag the user has used, grouped case-insensitively, keyed by its casefolded form.
+
+    The canonical spelling is the most-used variant (ties: alphabetical). Only this user's notes
+    are ever consulted.
+    """
+    rows = db.execute(
+        select(NoteTag.tag, func.count()).join(Note, Note.id == NoteTag.note_id)
+        .where(Note.user_id == user_id).group_by(NoteTag.tag)
+    ).all()
+    groups: dict[str, list[tuple[str, int]]] = {}
+    for tag, count in rows:
+        groups.setdefault(tag.casefold(), []).append((tag, count))
+    return {
+        key: {"tag": min(variants, key=lambda item: (-item[1], item[0]))[0],
+              "count": sum(count for _, count in variants)}
+        for key, variants in groups.items()
+    }
+
+
+def suggest_tags(catalog: dict[str, dict], query: str | None, limit: int) -> list[dict]:
+    needle = (query or "").strip().lstrip("#").strip().casefold()
+    matches = [(key, item) for key, item in catalog.items() if needle in key]
+    matches.sort(key=lambda pair: (not pair[0].startswith(needle), -pair[1]["count"], pair[0]))
+    return [dict(item) for _, item in matches[:limit]]
 
 
 def canonical_ends(note_id: UUID, other_id: UUID, link_type: str) -> tuple[UUID, UUID]:

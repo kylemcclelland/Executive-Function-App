@@ -142,7 +142,7 @@ def test_book_search_and_note_counts(client):
     note(client, "B", book_id=summa["id"])
 
     def titles(query):
-        return [item["title"] for item in client.get(f"/api/books?q={query}").json()]
+        return [item["title"] for item in client.get(f"/api/books?q={query}").json()["items"]]
 
     assert titles("") == ["Confessions", "Summa Theologiae", "The 50% Rule_"]
     assert titles("aquinas") == ["Summa Theologiae"]
@@ -152,7 +152,9 @@ def test_book_search_and_note_counts(client):
     assert titles("%25") == ["The 50% Rule_"]  # LIKE wildcards are escaped
     assert titles("_") == ["The 50% Rule_"]
     assert titles("nothing") == []
-    counts = {item["title"]: item["note_count"] for item in client.get("/api/books").json()}
+    counts = {
+        item["title"]: item["note_count"] for item in client.get("/api/books").json()["items"]
+    }
     assert counts == {"Confessions": 0, "Summa Theologiae": 2, "The 50% Rule_": 0}
 
 
@@ -173,7 +175,7 @@ def test_note_crud_and_types(client):
     assert (
         created["note_type"] == "quotation" and created["source_location"] == "ST I–II, q. 1, a. 8"
     )
-    assert created["tags"] == ["ethics", "telos"]
+    assert created["tags"] == ["Ethics", "Telos"]  # casing kept; "ethics" was a duplicate
     assert created["book_id"] is None and created["project_id"] is None
     assert created["created_at"].endswith("Z") and created["excerpt"].startswith("# Heading")
     path = f"/api/notes/{created['id']}"
@@ -189,7 +191,10 @@ def test_note_crud_and_types(client):
         },
     ).json()
     assert edited["title"] == "On the last end" and edited["note_type"] == "reflection"
-    assert edited["source_location"] is None and edited["tags"] == ["happiness", "telos"]
+    assert edited["source_location"] is None and edited["tags"] == [
+        "happiness",
+        "Telos",
+    ]  # the note keeps its own spelling
     assert edited["id"] == created["id"] and edited["updated_at"] >= created["updated_at"]
     assert client.patch(path, json={"tags": []}).json()["tags"] == []
     assert client.delete(path).status_code == 204
@@ -525,7 +530,7 @@ def test_other_users_data_is_invisible_and_untouchable(client, application):
             "link": str(link.id),
         }
     assert [n["title"] for n in client.get("/api/notes").json()] == ["Mine"]
-    assert [b["title"] for b in client.get("/api/books").json()] == ["My book"]
+    assert [b["title"] for b in client.get("/api/books").json()["items"]] == ["My book"]
     assert client.get("/api/notes?q=secret").json() == []
     assert client.get("/api/notes/graph").json()["edges"] == []
     for method, path, payload in [

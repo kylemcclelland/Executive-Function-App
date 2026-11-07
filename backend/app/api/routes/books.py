@@ -1,3 +1,4 @@
+import math
 from typing import Annotated
 from uuid import UUID
 
@@ -25,24 +26,58 @@ def duplicate_goodreads(db, user, goodreads_id: str | None, exclude: UUID | None
         raise HTTPException(409, "A book with that Goodreads ID is already in your library")
 
 
-@router.get("", response_model=list[ls.BookOut])
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 100
+
+
+def book_ordering(sort: str) -> list:
+    """Every ordering ends with the unique id, so no book is skipped or repeated across pages."""
+    by_title = [func.lower(Book.title), Book.title]
+    no_year_last = Book.publication_year.is_(None)   # False sorts first, so unknown years go last
+    orderings = {
+        "title": by_title,
+        "title_desc": [func.lower(Book.title).desc(), Book.title.desc()],
+        "recent": [Book.created_at.desc(), *by_title],
+        "year_desc": [no_year_last, Book.publication_year.desc(), *by_title],
+        "year_asc": [no_year_last, Book.publication_year.asc(), *by_title],
+    }
+    return [*orderings[sort], Book.id]
+
+
+@router.get("", response_model=ls.BookPage)
 def list_books(
     db: DB, user: CurrentUser, q: Annotated[str | None, Query(max_length=200)] = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    sort: ls.BookSort = "title",
 ):
-    statement = select(Book).where(Book.user_id == user.id)
+    """One page of the user's books.
+
+    Searching and sorting run in the database across the whole library; pagination is applied
+    last. A ``page`` past the end returns the last page (the response says which page it is).
+    """
+    filters = [Book.user_id == user.id]
     if q and q.strip():
         pattern = like_pattern(q)
-        statement = statement.where(
+        filters.append(
             func.lower(Book.title).like(pattern, escape="\\")
             | func.lower(cast(Book.authors, Text)).like(pattern, escape="\\")
             | func.lower(func.coalesce(Book.publisher, "")).like(pattern, escape="\\")
             | func.coalesce(Book.isbn_10, "").like(pattern, escape="\\")
             | func.coalesce(Book.isbn_13, "").like(pattern, escape="\\")
         )
-    books = list(db.scalars(statement.order_by(func.lower(Book.title), Book.id).limit(limit)))
+    total = db.scalar(select(func.count()).select_from(Book).where(*filters))
+    total_pages = math.ceil(total / page_size)
+    page = max(1, min(page, total_pages))
+    books = list(db.scalars(
+        select(Book).where(*filters).order_by(*book_ordering(sort))
+        .limit(page_size).offset((page - 1) * page_size)
+    ))
     counts = book_note_counts(db, [book.id for book in books])
-    return [book_values(book, counts) for book in books]
+    return {
+        "items": [book_values(book, counts) for book in books], "total": total, "page": page,
+        "page_size": page_size, "total_pages": total_pages,
+    }
 
 
 @router.post("", response_model=ls.BookOut, status_code=201)

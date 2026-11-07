@@ -3,16 +3,26 @@ export class ApiError extends Error {
   constructor(message: string, status: number) { super(message); this.status = status }
 }
 
-export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+async function failure(response: Response, method: string): Promise<never> {
+  const data = await response.json().catch(() => null)
+  const detail = typeof data?.detail === 'string' ? data.detail : null
+  throw new ApiError(detail ?? `Could not ${method === 'GET' ? 'load' : 'save'} this. Please try again. (${response.status})`, response.status)
+}
+
+export async function api<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
+    signal,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-  if (!response.ok) {
-    const data = await response.json().catch(() => null)
-    const detail = typeof data?.detail === 'string' ? data.detail : null
-    throw new ApiError(detail ?? `Could not ${method === 'GET' ? 'load' : 'save'} this. Please try again. (${response.status})`, response.status)
-  }
+  if (!response.ok) return failure(response, method)
   return response.status === 204 ? undefined as T : response.json()
+}
+
+/** Sends a file's raw bytes (e.g. a CSV) so the server can enforce size limits while reading. */
+export async function apiUpload<T>(path: string, file: File, contentType = 'text/csv'): Promise<T> {
+  const response = await fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': contentType }, body: file })
+  if (!response.ok) return failure(response, 'POST')
+  return response.json()
 }

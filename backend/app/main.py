@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api.routes import router
 from .core.config import Settings
 from .db import make_engine, make_session_factory
+from .services.goodreads import ImportStore
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -26,6 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
+    app.state.import_store = ImportStore()
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],

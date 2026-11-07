@@ -11,6 +11,7 @@ from ...models import DailyPriority, InboxItem, Step, Task
 from ...services.projects import link_values, touch_project
 from ...services.today import today_view
 from ..dependencies import DB, CurrentUser, owned_inbox, owned_step, owned_task
+from .book_import import router as book_import_router
 from .books import router as books_router
 from .notes import router as notes_router
 from .projects import router as projects_router
@@ -18,6 +19,7 @@ from .work_sessions import router as work_sessions_router
 
 router = APIRouter()
 router.include_router(projects_router)
+router.include_router(book_import_router)
 router.include_router(books_router)
 router.include_router(notes_router)
 router.include_router(work_sessions_router)

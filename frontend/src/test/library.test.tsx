@@ -60,7 +60,8 @@ beforeEach(() => {
     if (path === '/projects') return response(projects)
     if (path === '/books') {
       if (method === 'POST') { const created = makeBook(`new-${nextId++}`, body.title, body); books.push(created); return response(withCount(created), 201) }
-      return response(books.filter(b => !q || `${b.title} ${b.authors.join(' ')}`.toLowerCase().includes(q)).map(withCount))
+      const found = books.filter(b => !q || `${b.title} ${b.authors.join(' ')}`.toLowerCase().includes(q)).map(withCount)
+      return response({ items: found, total: found.length, page: 1, page_size: 50, total_pages: found.length ? 1 : 0 })
     }
     const bookMatch = /^\/books\/([^/]+)$/.exec(path)
     if (bookMatch) {

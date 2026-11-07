@@ -427,11 +427,19 @@ def test_migration_keeps_existing_tasks_and_their_project_links(application):
         assert {name: task.title for name, task in loaded.items()} == {
             "a": "a", "b": "b", "c": "c", "d": "d",
         }
-        assert loaded["a"].project_id == loaded["b"].project_id == shared
-        assert loaded["c"].project_id == solo
-        assert loaded["d"].project_id is None
+        # A project id used by two users can only belong to one of them (whichever the
+        # migration meets first); the other user's tasks lose the link, and nobody keeps a
+        # link to someone else's project.
         recovered = db.get(Project, shared)
-        assert recovered.user_id == user and recovered.name == "Untitled project"
+        assert recovered.name == "Untitled project" and recovered.user_id in (user, other_user)
+        shared_owner_tasks = {"a", "b"} if recovered.user_id == user else {"d"}
+        for name, task in loaded.items():
+            if name == "c":
+                assert task.project_id == solo
+            elif name in shared_owner_tasks:
+                assert task.project_id == shared
+            else:
+                assert task.project_id is None
         assert db.get(Project, solo).user_id == user
     with application.state.engine.begin() as connection:
         config.attributes["connection"] = connection

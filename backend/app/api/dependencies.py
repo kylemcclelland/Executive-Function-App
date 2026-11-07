@@ -32,11 +32,17 @@ def get_session(request: Request):
 DB = Annotated[Session, Depends(get_session, scope="function")]
 
 
-def get_user(request: Request, db: DB) -> User:
+def current_user_id(request: Request) -> UUID:
+    """The authenticated identity, without touching the database."""
     settings = request.app.state.settings
     if settings.app_env not in {"development", "test"}:
         raise HTTPException(503, "Authentication is not configured")
-    user_id = settings.dev_user_id or DEFAULT_USER_ID
+    return settings.dev_user_id or DEFAULT_USER_ID
+
+
+def get_user(request: Request, db: DB) -> User:
+    settings = request.app.state.settings
+    user_id = current_user_id(request)
     insert = pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
     db.execute(
         insert(User).values(id=user_id, timezone=settings.dev_user_timezone)

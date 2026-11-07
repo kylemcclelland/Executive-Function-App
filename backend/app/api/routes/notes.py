@@ -13,6 +13,8 @@ from ...services.library import (
     canonical_ends,
     connection_view,
     normalize_tags,
+    suggest_tags,
+    tag_catalog,
 )
 from ..dependencies import (
     DB,
@@ -27,13 +29,23 @@ from .projects import like_pattern
 router = APIRouter()
 
 
-def set_tags(note: Note, tags: list[str]) -> None:
-    wanted = set(tags)
-    for row in [row for row in note.tag_rows if row.tag not in wanted]:
-        note.tag_rows.remove(row)
-    present = {row.tag for row in note.tag_rows}
+def set_tags(db, user, note: Note, tags: list[str]) -> None:
+    """Make the note's tags exactly ``tags``, reusing existing spellings.
+
+    A tag the note already has keeps its spelling; otherwise a tag the user has used on any
+    note keeps that spelling; only a genuinely new tag keeps the capitalization as typed.
+    """
+    mine = {row.tag.casefold(): row.tag for row in note.tag_rows}
+    catalog = tag_catalog(db, user.id)
+    wanted: dict[str, str] = {}
     for tag in tags:
-        if tag not in present:
+        key = tag.casefold()
+        wanted[key] = mine.get(key) or (catalog[key]["tag"] if key in catalog else tag)
+    for row in [row for row in note.tag_rows if row.tag.casefold() not in wanted]:
+        note.tag_rows.remove(row)
+    present = {row.tag.casefold() for row in note.tag_rows}
+    for key, tag in wanted.items():
+        if key not in present:
             note.tag_rows.append(NoteTag(tag=tag))
 
 
@@ -56,7 +68,7 @@ def list_notes(
         if wanted:
             statement = statement.where(
                 select(NoteTag.note_id).where(
-                    NoteTag.note_id == Note.id, NoteTag.tag == wanted[0],
+                    NoteTag.note_id == Note.id, func.lower(NoteTag.tag) == wanted[0].casefold(),
                 ).exists()
             )
     if q and q.strip():
@@ -66,10 +78,19 @@ def list_notes(
             | func.lower(Note.content).like(pattern, escape="\\")
             | func.lower(func.coalesce(Note.source_location, "")).like(pattern, escape="\\")
             | select(NoteTag.note_id).where(
-                NoteTag.note_id == Note.id, NoteTag.tag.like(pattern, escape="\\"),
+                NoteTag.note_id == Note.id, func.lower(NoteTag.tag).like(pattern, escape="\\"),
             ).exists()
         )
     return db.scalars(statement.order_by(Note.updated_at.desc(), Note.id).limit(limit)).all()
+
+
+@router.get("/api/notes/tags", response_model=list[ls.TagSuggestion])
+def list_tags(
+    db: DB, user: CurrentUser, q: Annotated[str | None, Query(max_length=60)] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+):
+    """Tags used on any of the user's notes, best matches first, for autocomplete."""
+    return suggest_tags(tag_catalog(db, user.id), q, limit)
 
 
 @router.get("/api/notes/graph", response_model=ls.NoteGraphOut)
@@ -102,7 +123,7 @@ def create_note(body: ls.NoteCreate, db: DB, user: CurrentUser):
     if values["project_id"] is not None:
         owned_project(db, user, values["project_id"])
     note = Note(**values, user_id=user.id)
-    set_tags(note, tags)
+    set_tags(db, user, note, tags)
     db.add(note)
     db.flush()
     db.refresh(note, ["book", "project"])
@@ -127,7 +148,7 @@ def update_note(note_id: UUID, body: ls.NotePatch, db: DB, user: CurrentUser):
     for key, value in values.items():
         setattr(note, key, value)
     if tags is not None:
-        set_tags(note, tags)
+        set_tags(db, user, note, tags)
     note.updated_at = utcnow()
     db.flush()
     db.refresh(note, ["book", "project"])

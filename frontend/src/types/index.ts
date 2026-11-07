@@ -134,6 +134,11 @@ export interface WorkSession {
   resume_note: string | null
 }
 
+export interface TagSuggestion {
+  tag: string
+  count: number
+}
+
 export type NoteType = 'general' | 'reading_note' | 'quotation' | 'reflection' | 'research' | 'question'
 export type LinkType = 'related_to' | 'supports' | 'contradicts' | 'develops' | 'responds_to'
 
@@ -181,4 +186,72 @@ export interface Connection {
   explanation: string | null
   created_at: string
   note: NoteBrief
+}
+
+export interface ImportCounts {
+  total_rows: number
+  to_add: number
+  matched: number
+  to_update: number
+  duplicates: number
+  ambiguous: number
+  invalid: number
+}
+
+export interface ImportProblem {
+  row: number
+  title: string | null
+  kind: 'invalid' | 'duplicate' | 'ambiguous' | 'warning'
+  message: string
+}
+
+export interface ImportPreview {
+  token: string
+  expires_in_seconds: number
+  counts: ImportCounts
+  warnings: string[]
+  problems: ImportProblem[]
+  sample_new: { title: string; authors: string[]; year: number | null; goodreads_id: string | null }[]
+  sample_matched: { title: string; book_id: string; reason: 'goodreads_id' | 'isbn' | 'title_author'; fills: string[] }[]
+}
+
+export interface ImportResult {
+  summary: { added: number; matched: number; updated: number; skipped: number; duplicates: number; ambiguous: number; invalid: number }
+  problems: ImportProblem[]
+  books: { id: string; title: string; action: 'added' | 'updated' | 'matched' }[]
+}
+
+export interface CoverBatch {
+  checked: number
+  found: number
+  not_found: number
+  errors: number
+  cached: number
+  converted: number
+  rate_limited: boolean
+  stopped_early: boolean
+  blocked_until: string | null
+  retry_after_seconds: number | null
+  checked_ids: string[]
+  remaining: number
+  legacy_remaining: number
+}
+
+export interface CoverStatus {
+  count: number
+  with_covers: number
+  found_lookups: number
+  not_found_lookups: number
+  blocked_until: string | null
+  retry_after_seconds: number | null
+}
+
+export type BookSort = 'title' | 'title_desc' | 'recent' | 'year_desc' | 'year_asc'
+
+export interface BookPage {
+  items: Book[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
 }

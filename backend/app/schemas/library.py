@@ -102,6 +102,9 @@ class BookPatch(BookFields):
         return self
 
 
+BookSort = Literal["title", "title_desc", "recent", "year_desc", "year_asc"]
+
+
 class BookOut(Output):
     id: UUID
     title: str
@@ -119,12 +122,22 @@ class BookOut(Output):
     note_count: int
 
 
+class BookPage(Output):
+    items: list[BookOut]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 def clean_tags(value):
     if value is None:
         return None
+    if not isinstance(value, (list, tuple)) or not all(isinstance(tag, str) for tag in value):
+        raise ValueError("Tags must be a list of text values")
     from ..services.library import normalize_tags
 
-    return normalize_tags([str(tag) for tag in value])
+    return normalize_tags(list(value))
 
 
 class NoteFields(Input):
@@ -159,6 +172,11 @@ class NotePatch(NoteFields):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
+
+
+class TagSuggestion(Output):
+    tag: str
+    count: int
 
 
 class NoteBrief(Output):

@@ -6,6 +6,8 @@ from app.core.config import Settings
 from app.db import Base, make_engine
 from app.models import (  # noqa: F401
     Book,
+    CoverLookup,
+    CoverServiceState,
     DailyPriority,
     InboxItem,
     Milestone,
@@ -23,7 +25,9 @@ from app.models import (  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep application loggers (e.g. the Open Library diagnostics) alive: fileConfig would
+    # otherwise disable every logger that already exists when migrations run at startup.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 settings = Settings()
 url = settings.database_url

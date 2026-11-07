@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -268,7 +269,7 @@ class Note(Timestamps, Base):
 
     @property
     def tags(self) -> list[str]:
-        return sorted(row.tag for row in self.tag_rows)
+        return sorted((row.tag for row in self.tag_rows), key=lambda tag: (tag.casefold(), tag))
 
     @property
     def book_title(self) -> str | None:
@@ -305,6 +306,32 @@ class NoteLink(Base):
     link_type: Mapped[str] = mapped_column(String(20))
     explanation: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+class CoverLookup(Base):
+    """Remembers what Open Library said about an ISBN, so it is never asked twice needlessly.
+
+    Only definite answers are stored (a cover exists, or none does). Errors and rate limits are
+    transient and are never cached. The answer is a fact about the ISBN, not about a user.
+    """
+
+    __tablename__ = "cover_lookups"
+    __table_args__ = (
+        CheckConstraint("result IN ('found','not_found')", name="cover_lookup_result"),
+    )
+    isbn: Mapped[str] = mapped_column(String(13), primary_key=True)
+    result: Mapped[str] = mapped_column(String(12))
+    cover_id: Mapped[int | None] = mapped_column(BigInteger())
+    looked_up_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+class CoverServiceState(Base):
+    """Cooldown after Open Library asks us to slow down; persists across restarts."""
+
+    __tablename__ = "cover_service_state"
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    blocked_until: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
 class DailyPriority(Base):

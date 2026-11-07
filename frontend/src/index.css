@@ -160,3 +160,35 @@ label{color:var(--ink-2);font-weight:500}
 .connect-form{display:grid;gap:14px;margin-top:16px}.connect-results{display:grid;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm)}
 .connect-selected{display:grid;gap:4px;justify-items:start}.connect-selected strong{font-family:var(--font-serif);font-weight:400;font-size:18px}.connect-sentence{font-size:13px;line-height:1.6;background:var(--cream);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
 @media(max-width:900px){.library-layout,.notes-layout{grid-template-columns:minmax(0,1fr)}.library-list.has-selection,.notes-list.has-selection{display:none}.back-link{display:inline-flex}.book-head{flex-direction:column;gap:12px}.note-view{padding:20px}}
+/* ===== Goodreads import and covers ===== */
+.import-stage{display:grid;gap:14px;margin-top:14px}.import-steps{margin:0;padding-left:1.3em;display:grid;gap:6px;font-size:13px;line-height:1.6;color:var(--ink-2)}
+.file-drop{display:flex;align-items:center;justify-content:center;gap:10px;padding:26px 16px;border:1.5px dashed var(--control);border-radius:var(--radius);background:var(--cream);color:var(--green-deep);font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+.file-drop:hover,.file-drop:focus-within{background:var(--sage);border-color:var(--green)}.file-drop input{position:absolute;opacity:0;width:1px;height:1px}.file-drop.is-busy{cursor:progress;opacity:.7}
+.import-banner{background:var(--gold-soft);border:1px solid #e4d6ba;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--ink-2)}.import-banner.is-done{background:var(--sage);border-color:var(--line-strong)}
+.import-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.import-stat{background:var(--cream);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 8px;text-align:center}
+.import-stat strong{display:block;font-family:var(--font-serif);font-weight:400;font-size:26px;line-height:1.1}.import-stat span{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}.import-stat.is-quiet strong{color:var(--ink-soft)}
+.import-heading{font-family:var(--font-serif);font-weight:400;font-size:17px;margin-top:4px}.import-note{font-size:13px;line-height:1.6;background:var(--cream);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
+.import-list{list-style:none;margin:0;padding:0;display:grid;max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm)}.import-list li{display:grid;gap:2px;padding:9px 12px;border-bottom:1px solid var(--line)}.import-list li:last-child{border:0}
+.import-list a{color:var(--green-deep);text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.cover-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-top:14px;font-size:12px;color:var(--ink-soft)}.cover-status{display:inline-flex;align-items:center;gap:6px;line-height:1.5;max-width:70ch}
+@media(max-width:650px){.import-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* ===== Library pagination and scrolling ===== */
+.library-tools{display:grid;gap:8px}.library-tools select.input{padding-top:8px;padding-bottom:8px}
+.book-scroll{max-height:min(68vh,740px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent;border-radius:var(--radius-sm);padding-right:4px}
+.pagination{display:grid;gap:10px;padding-top:4px}.pagination-summary{font-size:12px;color:var(--ink-soft)}
+.pagination-controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.pagination-pages{display:flex;flex-wrap:wrap;gap:2px;list-style:none;margin:0;padding:0;align-items:center}
+.pagination-pages li{display:inline-flex}.pagination-pages span{padding:0 4px;color:var(--ink-soft)}.pagination-pages .button{min-width:32px;padding-left:8px;padding-right:8px}
+@media(max-width:900px){.book-scroll{max-height:62vh}}
+.book-picker{display:grid;gap:6px;align-content:start}.book-picker .input{margin-top:0}
+/* ===== Tag autocomplete ===== */
+.tag-field{display:grid;gap:6px;position:relative}
+.tag-input{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:42px;padding:5px 8px;cursor:text;margin-top:0}
+.tag-input:focus-within{outline:3px solid var(--green-deep);outline-offset:2px}
+.tag-input input{flex:1 1 120px;min-width:90px;border:0;background:transparent;font-size:13px;color:var(--ink);padding:5px 2px;box-shadow:none}.tag-input input:focus-visible{outline:0}.tag-input input::placeholder{color:var(--ink-soft)}
+.tag-chips{display:contents;list-style:none;margin:0;padding:0}
+.tag-chip{display:inline-flex;align-items:center;gap:2px;background:var(--sage);border:1px solid var(--line-strong);color:var(--ink-2);border-radius:999px;padding:2px 3px 2px 10px;font-size:12px;font-weight:600;line-height:1.5}
+.tag-chip button{display:grid;place-items:center;width:20px;height:20px;border:0;border-radius:50%;background:transparent;color:var(--green-deep);padding:0}.tag-chip button:hover{background:var(--line-strong)}
+.tag-suggestions{position:absolute;z-index:60;left:0;right:0;top:calc(100% - 22px);margin:0;padding:4px;list-style:none;background:var(--paper);border:1px solid var(--line-strong);border-radius:var(--radius-sm);box-shadow:0 8px 24px #333b3522;max-height:240px;overflow:auto}
+.tag-option{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 10px;border-radius:4px;font-size:13px;cursor:pointer;color:var(--ink)}
+.tag-option.is-active{background:var(--sage);color:var(--green-deep)}.tag-option small{color:var(--ink-soft);font-size:11px}.tag-option.is-new{font-family:var(--font-serif);font-style:italic}
+.tag-hint{min-height:1.4em}
