@@ -741,7 +741,7 @@ def test_cover_lookup_handles_success_missing_rate_limit_and_network_errors(monk
         (200, covers.FOUND),
         (http_error(404), covers.NOT_FOUND),
         (http_error(429), covers.RATE_LIMITED),
-        (http_error(503), covers.RATE_LIMITED),
+        (http_error(503), covers.UNAVAILABLE),
         (http_error(500), covers.ERROR),
         (urllib.error.URLError("offline"), covers.ERROR),
         (TimeoutError(), covers.ERROR),

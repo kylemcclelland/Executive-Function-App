@@ -98,12 +98,14 @@ def test_retry_after_understands_seconds_and_http_dates():
 
 @pytest.mark.parametrize("code", [429, 503])
 def test_lookup_reads_retry_after_from_the_response(monkeypatch, code):
+    expected = covers.RATE_LIMITED if code == 429 else covers.UNAVAILABLE
+
     def fake(request, timeout=None):
         raise http_error(code, "120")
 
     monkeypatch.setattr(covers.urllib.request, "urlopen", fake)
     result = covers.lookup_cover(isbn13(1))
-    assert result == covers.Lookup(covers.RATE_LIMITED, 120.0, http_status=code)
+    assert result == covers.Lookup(expected, 120.0, http_status=code)
 
     when = email.utils.format_datetime(datetime.now(UTC) + timedelta(seconds=300), usegmt=True)
     monkeypatch.setattr(
@@ -112,16 +114,14 @@ def test_lookup_reads_retry_after_from_the_response(monkeypatch, code):
         lambda r, timeout=None: (_ for _ in ()).throw(http_error(code, when)),
     )
     dated = covers.lookup_cover(isbn13(1))
-    assert dated.status == covers.RATE_LIMITED and 295 <= dated.retry_after <= 300
+    assert dated.status == expected and 295 <= dated.retry_after <= 300
 
     monkeypatch.setattr(
         covers.urllib.request,
         "urlopen",
         lambda r, timeout=None: (_ for _ in ()).throw(http_error(code)),
     )
-    assert covers.lookup_cover(isbn13(1)) == covers.Lookup(
-        covers.RATE_LIMITED, None, http_status=code
-    )
+    assert covers.lookup_cover(isbn13(1)) == covers.Lookup(expected, None, http_status=code)
 
 
 def test_the_default_pace_is_one_request_every_four_seconds():
@@ -659,6 +659,7 @@ def test_the_missing_covers_status_reports_progress(client, monkeypatch, sleeps,
         "not_found_lookups": 1,
         "blocked_until": None,
         "retry_after_seconds": None,
+        "cooldown_reason": None,
     }
 
 
@@ -720,7 +721,7 @@ def test_the_cooldown_start_is_logged_with_operation_and_sequence(
     with caplog.at_level(logging.INFO, logger="app.services.covers"):
         assert enrich(client, limit=5)["rate_limited"]
     assert "open_library lookup: op=enrich request=1 result=not_found" in caplog.text
-    assert "op=enrich request=2 http_status=429 retry_after=60.0" in caplog.text
+    assert "op=enrich request=2 reason=rate_limited http_status=429 retry_after=60.0" in caplog.text
     assert "cooldown started" in caplog.text and "blocked_until=" in caplog.text
     assert isbn13(33) not in caplog.text and isbn13(34) not in caplog.text
 
@@ -734,11 +735,83 @@ def test_a_cooldown_during_legacy_conversion_is_logged_as_such(
     monkeypatch.setattr(
         covers,
         "lookup_cover",
-        Script({isbn13(35): covers.Lookup(covers.RATE_LIMITED, None, http_status=503)}),
+        Script({isbn13(35): covers.Lookup(covers.UNAVAILABLE, None, http_status=503)}),
     )
     with caplog.at_level(logging.INFO, logger="app.services.covers"):
-        assert enrich(client)["rate_limited"]
-    assert "op=convert_legacy request=1 http_status=503 retry_after=None" in caplog.text
+        assert enrich(client)["unavailable"]
+    assert (
+        "op=convert_legacy request=1 reason=unavailable http_status=503 retry_after=None"
+        in caplog.text
+    )
+
+
+# ------------------------------------------------------------------ 503: temporarily unavailable
+
+
+def test_a_503_without_retry_after_pauses_briefly_not_fifteen_minutes(
+    client, monkeypatch, sleeps, clock
+):
+    make_book(client, "Only", isbn_13=isbn13(130))
+    script = Script({isbn13(130): covers.Lookup(covers.UNAVAILABLE, None, http_status=503)})
+    monkeypatch.setattr(covers, "lookup_cover", script)
+    result = enrich(client)
+    assert result["unavailable"] and not result["rate_limited"] and result["stopped_early"]
+    assert result["cooldown_reason"] == "unavailable"
+    assert result["retry_after_seconds"] == covers.UNAVAILABLE_COOLDOWN_SECONDS == 60
+    # the pause is honoured without any further request, and keeps its reason
+    again = enrich(client)
+    assert again["unavailable"] and not again["rate_limited"] and len(script.calls) == 1
+    status = client.get("/api/books/covers/missing").json()
+    assert status["cooldown_reason"] == "unavailable" and status["retry_after_seconds"] == 60
+    # once it passes, lookups resume: the failure cached nothing
+    clock["now"] += timedelta(seconds=61)
+    script.outcomes[isbn13(130)] = covers.NOT_FOUND
+    resumed = enrich(client)
+    assert not resumed["unavailable"] and not resumed["rate_limited"]
+    assert len(script.calls) == 2 and resumed["cooldown_reason"] is None
+
+
+def test_a_503_with_retry_after_is_honoured_conservatively(client, monkeypatch, sleeps, clock):
+    make_book(client, "Only", isbn_13=isbn13(131))
+    monkeypatch.setattr(
+        covers,
+        "lookup_cover",
+        Script({isbn13(131): covers.Lookup(covers.UNAVAILABLE, 300.0, http_status=503)}),
+    )
+    result = enrich(client)
+    assert result["cooldown_reason"] == "unavailable"
+    assert result["retry_after_seconds"] == 300  # the header wins over the short default
+
+
+def test_a_real_503_is_classified_as_unavailable_and_never_cached(
+    client, application, monkeypatch, sleeps, clock
+):
+    make_book(client, "Only", isbn_13=isbn13(132))
+    monkeypatch.setattr(
+        covers.urllib.request,
+        "urlopen",
+        lambda r, timeout=None: (_ for _ in ()).throw(http_error(503)),
+    )
+    result = enrich(client)
+    assert result["unavailable"] and not result["rate_limited"]
+    assert result["checked"] == 1  # the batch stopped at once, no retry
+    with application.state.session_factory() as db:
+        assert db.get(CoverLookup, isbn13(132)) is None  # a 503 is not an answer
+
+
+def test_a_real_429_still_gets_the_cautious_rate_limit_default(
+    client, monkeypatch, sleeps, clock
+):
+    make_book(client, "Only", isbn_13=isbn13(133))
+    monkeypatch.setattr(
+        covers.urllib.request,
+        "urlopen",
+        lambda r, timeout=None: (_ for _ in ()).throw(http_error(429)),
+    )
+    result = enrich(client)
+    assert result["rate_limited"] and not result["unavailable"]
+    assert result["cooldown_reason"] == "rate_limited"
+    assert result["retry_after_seconds"] == covers.DEFAULT_COOLDOWN_SECONDS
 
 
 def test_migration_0006_adds_tables_and_keeps_existing_data(application):

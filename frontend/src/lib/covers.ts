@@ -1,6 +1,8 @@
-/** A friendly sentence for when Open Library has asked us to wait. */
-export function cooldownMessage(blockedUntil: string | null, retryAfterSeconds: number | null) {
-  const base = 'Open Library asked us to slow down.'
+/** A friendly sentence for when Open Library has asked us to wait or is having trouble. */
+export function cooldownMessage(blockedUntil: string | null, retryAfterSeconds: number | null, reason: 'rate_limited' | 'unavailable' | null = 'rate_limited') {
+  const base = reason === 'unavailable'
+    ? 'Open Library is temporarily unavailable.'
+    : 'Open Library asked us to slow down.'
   if (!blockedUntil || retryAfterSeconds === null) return `${base} Try again a little later.`
   const at = new Date(blockedUntil).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
   const minutes = Math.ceil(retryAfterSeconds / 60)

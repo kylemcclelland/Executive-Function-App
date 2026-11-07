@@ -27,7 +27,7 @@ export function CoverEnrichment() {
   const count = status.data?.count ?? 0
   const blockedUntil = status.data?.blocked_until ?? null
   const cooling = blockedUntil !== null && Date.parse(blockedUntil) > now
-  const coolingNote = cooling ? cooldownMessage(blockedUntil, Math.max(0, Math.ceil((Date.parse(blockedUntil) - now) / 1000))) : ''
+  const coolingNote = cooling ? cooldownMessage(blockedUntil, Math.max(0, Math.ceil((Date.parse(blockedUntil) - now) / 1000)), status.data?.cooldown_reason ?? null) : ''
   async function run() {
     setRunning(true)
     setMessage('')
@@ -46,7 +46,7 @@ export function CoverEnrichment() {
         setFound(total)
         setLeft(result.remaining)
         if (result.found > 0 || result.converted > 0) await client.invalidateQueries({ queryKey: ['books'] })
-        if (result.rate_limited) { note = cooldownMessage(result.blocked_until, result.retry_after_seconds); break }
+        if (result.rate_limited || result.unavailable) { note = cooldownMessage(result.blocked_until, result.retry_after_seconds, result.cooldown_reason); break }
         if (result.stopped_early) { note = 'Couldn’t reach Open Library just now. Nothing was changed. Try again later.'; break }
         if (result.remaining === 0 && result.legacy_remaining === 0) break
         if (result.checked === 0 && result.cached === 0 && result.converted === 0) break

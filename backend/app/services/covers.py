@@ -48,12 +48,16 @@ MAX_BATCH = 5
 MAX_CONSECUTIVE_ERRORS = 2
 NOT_FOUND_TTL = timedelta(days=30)
 DEFAULT_COOLDOWN_SECONDS = 15 * 60
+UNAVAILABLE_COOLDOWN_SECONDS = 60      # a 503 without Retry-After: pause briefly, not 15 min
 MIN_COOLDOWN_SECONDS = 10
 MAX_COOLDOWN_SECONDS = 24 * 60 * 60
 SERVICE = "open_library"
+UNAVAILABLE_SERVICE = "open_library_unavailable"
 LOOKUP_CHUNK = 400  # keeps IN (...) lists well under SQLite's variable limit
 
 FOUND, NOT_FOUND, RATE_LIMITED, ERROR = "found", "not_found", "rate_limited", "error"
+UNAVAILABLE = "unavailable"            # HTTP 503: Open Library itself is having trouble
+RATE_LIMIT_REASON, UNAVAILABLE_REASON = "rate_limited", "unavailable"
 
 
 @dataclass(frozen=True)
@@ -149,13 +153,20 @@ def lookup_cover(isbn: str) -> Lookup:
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return Lookup(NOT_FOUND)
-        if exc.code in (429, 503):
+        if exc.code == 429:
             header = exc.headers.get("Retry-After") if exc.headers else None
             logger.warning(
                 "open_library rate limit: http_status=%s retry_after_header=%r",
                 exc.code, header,
             )
-            return Lookup(RATE_LIMITED, parse_retry_after(header, utcnow()), http_status=exc.code)
+            return Lookup(RATE_LIMITED, parse_retry_after(header, utcnow()), http_status=429)
+        if exc.code == 503:
+            header = exc.headers.get("Retry-After") if exc.headers else None
+            logger.warning(
+                "open_library unavailable: http_status=%s retry_after_header=%r",
+                exc.code, header,
+            )
+            return Lookup(UNAVAILABLE, parse_retry_after(header, utcnow()), http_status=503)
         logger.warning("open_library http error: http_status=%s", exc.code)
         return Lookup(ERROR, http_status=exc.code)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
@@ -173,28 +184,63 @@ def cover_url_for(isbn: str, cover_id: int | None = None) -> str:
 
 # ------------------------------------------------------------------ cooldown and cache
 
+def active_cooldown_state(db: Session, now: datetime) -> tuple[datetime | None, str | None]:
+    """The latest active pause and why it exists: a rate limit or plain unavailability."""
+    best: tuple[datetime | None, str | None] = (None, None)
+    for name, reason in ((SERVICE, RATE_LIMIT_REASON), (UNAVAILABLE_SERVICE, UNAVAILABLE_REASON)):
+        state = db.get(CoverServiceState, name)
+        if state is not None and state.blocked_until is not None and state.blocked_until > now:
+            if best[0] is None or state.blocked_until > best[0]:
+                best = (state.blocked_until, reason)
+    return best
+
+
 def active_cooldown(db: Session, now: datetime) -> datetime | None:
-    state = db.get(CoverServiceState, SERVICE)
-    if state is not None and state.blocked_until is not None and state.blocked_until > now:
-        return state.blocked_until
-    return None
+    return active_cooldown_state(db, now)[0]
 
 
-def cooldown_info(blocked_until: datetime | None) -> dict:
+def cooldown_info(blocked_until: datetime | None, reason: str | None = None) -> dict:
     if blocked_until is None:
-        return {"blocked_until": None, "retry_after_seconds": None}
+        return {"blocked_until": None, "retry_after_seconds": None, "cooldown_reason": None}
     seconds = max(0, math.ceil((blocked_until - utcnow()).total_seconds()))
-    return {"blocked_until": blocked_until, "retry_after_seconds": seconds}
+    return {
+        "blocked_until": blocked_until,
+        "retry_after_seconds": seconds,
+        "cooldown_reason": reason or RATE_LIMIT_REASON,
+    }
 
 
-def start_cooldown(session_factory, retry_after: float | None) -> datetime:
-    seconds = DEFAULT_COOLDOWN_SECONDS if retry_after is None else retry_after
+def start_cooldown(
+    session_factory,
+    retry_after: float | None,
+    service: str = SERVICE,
+    default_seconds: float = DEFAULT_COOLDOWN_SECONDS,
+) -> datetime:
+    seconds = default_seconds if retry_after is None else retry_after
     seconds = min(max(seconds, MIN_COOLDOWN_SECONDS), MAX_COOLDOWN_SECONDS)
     now = utcnow()
     until = now + timedelta(seconds=seconds)
     with session_factory.begin() as db:
-        db.merge(CoverServiceState(name=SERVICE, blocked_until=until, updated_at=now))
+        db.merge(CoverServiceState(name=service, blocked_until=until, updated_at=now))
     return until
+
+
+def pause_for(session_factory, lookup: Lookup) -> tuple[datetime, str]:
+    """Persist the pause a 429 or 503 asks for, and name its reason.
+
+    A rate limit without Retry-After keeps the cautious 15-minute default. Plain
+    unavailability without one gets only a short pause: the service may be back any moment,
+    and no quota was spent. Either way the batch has already stopped — nothing retries.
+    """
+    if lookup.status == RATE_LIMITED:
+        return start_cooldown(session_factory, lookup.retry_after), RATE_LIMIT_REASON
+    return (
+        start_cooldown(
+            session_factory, lookup.retry_after,
+            service=UNAVAILABLE_SERVICE, default_seconds=UNAVAILABLE_COOLDOWN_SECONDS,
+        ),
+        UNAVAILABLE_REASON,
+    )
 
 
 def record_lookup(session_factory, isbn: str, result: str, cover_id: int | None = None) -> None:
@@ -310,7 +356,7 @@ def convert_legacy_covers(session_factory, user_id, skip, budget: int, now: date
     Ran as the quiet tail of a normal enrichment batch, so it shares its pacing and cooldown.
     """
     out: dict = {"converted": [], "checked": 0, "errors": 0, "checked_ids": [],
-                 "blocked_until": None}
+                 "blocked_until": None, "cooldown_reason": None}
     with session_factory() as db:
         rows = db.execute(
             select(Book.id, func.coalesce(Book.isbn_13, Book.isbn_10))
@@ -344,13 +390,14 @@ def convert_legacy_covers(session_factory, user_id, skip, budget: int, now: date
                     "open_library lookup: op=convert_legacy request=%d result=%s",
                     requests_made, lookup.status,
                 )
-                if lookup.status == RATE_LIMITED:
-                    out["blocked_until"] = start_cooldown(session_factory, lookup.retry_after)
+                if lookup.status in (RATE_LIMITED, UNAVAILABLE):
+                    until, reason = pause_for(session_factory, lookup)
+                    out["blocked_until"], out["cooldown_reason"] = until, reason
                     logger.warning(
                         "open_library cooldown started: op=convert_legacy request=%d "
-                        "http_status=%s retry_after=%s blocked_until=%s",
-                        requests_made, lookup.http_status, lookup.retry_after,
-                        out["blocked_until"].isoformat(),
+                        "reason=%s http_status=%s retry_after=%s blocked_until=%s",
+                        requests_made, reason, lookup.http_status, lookup.retry_after,
+                        until.isoformat(),
                     )
                     break
                 if lookup.status == ERROR:
@@ -385,9 +432,9 @@ def enrich_covers(session_factory, user_id, limit: int = DEFAULT_BATCH, skip=())
     skip = set(skip)
     now = utcnow()
     stats = {"checked": 0, "found": 0, "not_found": 0, "errors": 0, "cached": 0,
-             "rate_limited": False, "stopped_early": False}
+             "rate_limited": False, "unavailable": False, "stopped_early": False}
     with session_factory() as db:
-        blocked_until = active_cooldown(db, now)
+        blocked_until, cooldown_reason = active_cooldown_state(db, now)
         candidates = [
             (row[0], row[1]) for row in db.execute(
                 select(Book.id, func.coalesce(Book.isbn_13, Book.isbn_10))
@@ -399,7 +446,9 @@ def enrich_covers(session_factory, user_id, limit: int = DEFAULT_BATCH, skip=())
     checked_ids: list = []
     requests_made = 0
     if blocked_until is not None:   # still cooling down: make no request at all
-        stats["rate_limited"] = stats["stopped_early"] = True
+        stats["rate_limited"] = cooldown_reason == RATE_LIMIT_REASON
+        stats["unavailable"] = cooldown_reason == UNAVAILABLE_REASON
+        stats["stopped_early"] = True
     else:
         by_isbn: dict[str, list] = {}
         for book_id, isbn in candidates:
@@ -431,15 +480,17 @@ def enrich_covers(session_factory, user_id, limit: int = DEFAULT_BATCH, skip=())
                         "open_library lookup: op=enrich request=%d result=%s",
                         requests_made, lookup.status,
                     )
-                    if lookup.status == RATE_LIMITED:
-                        blocked_until = start_cooldown(session_factory, lookup.retry_after)
+                    if lookup.status in (RATE_LIMITED, UNAVAILABLE):
+                        blocked_until, cooldown_reason = pause_for(session_factory, lookup)
                         logger.warning(
-                            "open_library cooldown started: op=enrich request=%d http_status=%s "
-                            "retry_after=%s blocked_until=%s",
-                            requests_made, lookup.http_status, lookup.retry_after,
-                            blocked_until.isoformat(),
+                            "open_library cooldown started: op=enrich request=%d reason=%s "
+                            "http_status=%s retry_after=%s blocked_until=%s",
+                            requests_made, cooldown_reason, lookup.http_status,
+                            lookup.retry_after, blocked_until.isoformat(),
                         )
-                        stats["rate_limited"] = stats["stopped_early"] = True
+                        stats["rate_limited"] = cooldown_reason == RATE_LIMIT_REASON
+                        stats["unavailable"] = cooldown_reason == UNAVAILABLE_REASON
+                        stats["stopped_early"] = True
                         break                      # stop at once; never retry in a loop
                     if lookup.status == ERROR:
                         outcomes[isbn] = ERROR
@@ -479,12 +530,14 @@ def enrich_covers(session_factory, user_id, limit: int = DEFAULT_BATCH, skip=())
         stats["errors"] += legacy["errors"]
         checked_ids += legacy["checked_ids"]
         if legacy["blocked_until"] is not None:
-            blocked_until = legacy["blocked_until"]
-            stats["rate_limited"] = stats["stopped_early"] = True
+            blocked_until, cooldown_reason = legacy["blocked_until"], legacy["cooldown_reason"]
+            stats["rate_limited"] = cooldown_reason == RATE_LIMIT_REASON
+            stats["unavailable"] = cooldown_reason == UNAVAILABLE_REASON
+            stats["stopped_early"] = True
     stats["converted"] = len(converted)
     with session_factory() as db:
         remaining = count_missing(db, user_id, skip | set(checked_ids))
         legacy_remaining = count_legacy(db, user_id, skip | set(checked_ids))
     return {**stats, "updated": updated + converted, "checked_ids": checked_ids,
             "remaining": remaining, "legacy_remaining": legacy_remaining,
-            **cooldown_info(blocked_until)}
+            **cooldown_info(blocked_until, cooldown_reason)}

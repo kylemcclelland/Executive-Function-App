@@ -150,11 +150,11 @@ def cancel_import(token: str, request: Request, user: CurrentUser):
 def missing_covers(db: DB, user: CurrentUser):
     """How many books could still get a cover, how far enrichment has come, and whether Open
     Library has asked us to wait."""
-    blocked = covers.active_cooldown(db, utcnow())
+    blocked, reason = covers.active_cooldown_state(db, utcnow())
     return {
         "count": covers.count_missing(db, user.id),
         **covers.library_cover_stats(db, user.id),
-        **covers.cooldown_info(blocked),
+        **covers.cooldown_info(blocked, reason),
     }
 
 

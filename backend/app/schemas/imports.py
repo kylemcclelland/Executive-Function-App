@@ -92,9 +92,11 @@ class CoverEnrichOut(Output):
     cached: int
     converted: int
     rate_limited: bool
+    unavailable: bool
     stopped_early: bool
     blocked_until: datetime | None
     retry_after_seconds: int | None
+    cooldown_reason: Literal["rate_limited", "unavailable"] | None
     updated: list[CoverUpdate]
     checked_ids: list[UUID]
     remaining: int
@@ -108,3 +110,4 @@ class CoverMissingOut(Output):
     not_found_lookups: int
     blocked_until: datetime | None = None
     retry_after_seconds: int | None = None
+    cooldown_reason: Literal["rate_limited", "unavailable"] | None = None

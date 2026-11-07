@@ -221,6 +221,8 @@ export interface ImportResult {
   books: { id: string; title: string; action: 'added' | 'updated' | 'matched' }[]
 }
 
+export type CoverCooldownReason = 'rate_limited' | 'unavailable'
+
 export interface CoverBatch {
   checked: number
   found: number
@@ -229,9 +231,11 @@ export interface CoverBatch {
   cached: number
   converted: number
   rate_limited: boolean
+  unavailable: boolean
   stopped_early: boolean
   blocked_until: string | null
   retry_after_seconds: number | null
+  cooldown_reason: CoverCooldownReason | null
   checked_ids: string[]
   remaining: number
   legacy_remaining: number
@@ -244,6 +248,7 @@ export interface CoverStatus {
   not_found_lookups: number
   blocked_until: string | null
   retry_after_seconds: number | null
+  cooldown_reason: CoverCooldownReason | null
 }
 
 export type BookSort = 'title' | 'title_desc' | 'recent' | 'year_desc' | 'year_asc'

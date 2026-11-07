@@ -31,10 +31,10 @@ let previewResponse: () => Response
 let confirmResponse: () => Response
 let missing: number
 let lookupStats: { found_lookups: number; not_found_lookups: number }
-type Cooldown = { blocked_until: string | null; retry_after_seconds: number | null }
+type Cooldown = { blocked_until: string | null; retry_after_seconds: number | null; cooldown_reason?: 'rate_limited' | 'unavailable' | null }
 let cooldown: Cooldown
 let enrich: (body: { limit: number; skip: string[] }, signal?: AbortSignal) => Promise<Response> | Response
-const batch = (fields: Partial<CoverBatch> = {}): CoverBatch => ({ checked: 0, found: 0, not_found: 0, errors: 0, cached: 0, converted: 0, rate_limited: false, stopped_early: false, blocked_until: null, retry_after_seconds: null, checked_ids: [], remaining: 0, legacy_remaining: 0, ...fields })
+const batch = (fields: Partial<CoverBatch> = {}): CoverBatch => ({ checked: 0, found: 0, not_found: 0, errors: 0, cached: 0, converted: 0, rate_limited: false, unavailable: false, stopped_early: false, blocked_until: null, retry_after_seconds: null, cooldown_reason: null, checked_ids: [], remaining: 0, legacy_remaining: 0, ...fields })
 const inMinutes = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString()
 let queryClient: QueryClient
 type RequestRecord = { url: string; method: string; body: unknown; contentType?: string }
@@ -67,7 +67,7 @@ beforeEach(() => {
     if (url.pathname === '/books/import/preview') return previewResponse()
     if (url.pathname === '/books/import/confirm') return confirmResponse()
     if (url.pathname.startsWith('/books/import/') && method === 'DELETE') return response(null, 204)
-    if (url.pathname === '/books/covers/missing') return response({ count: missing, with_covers: books.filter(b => b.cover_url).length, ...lookupStats, ...cooldown })
+    if (url.pathname === '/books/covers/missing') return response({ count: missing, with_covers: books.filter(b => b.cover_url).length, ...lookupStats, cooldown_reason: null, ...cooldown })
     if (url.pathname === '/books/covers/enrich') return enrich(body as { limit: number; skip: string[] }, options?.signal ?? undefined)
     return response({ detail: `Unhandled ${method} ${url.pathname}` }, 404)
   }))
@@ -326,6 +326,21 @@ describe('Book covers', () => {
     expect(hotlinked.querySelector('.book-cover-fallback')).toHaveTextContent('H')
     const steady = screen.getByRole('link', { name: /Steady/ })
     expect(steady.querySelector('img')).toHaveAttribute('src', 'https://covers.openlibrary.org/b/id/8231856-M.jpg')
+  })
+
+  it('tells unavailability apart from rate limiting, with a shorter wait', async () => {
+    missing = 2
+    const until = inMinutes(1)
+    enrich = () => {
+      cooldown = { blocked_until: until, retry_after_seconds: 60, cooldown_reason: 'unavailable' }
+      return response(batch({ checked: 1, unavailable: true, stopped_early: true, blocked_until: until, retry_after_seconds: 60, cooldown_reason: 'unavailable', remaining: 2 }))
+    }
+    const user = setup()
+    await user.click(await screen.findByRole('button', { name: 'Find missing covers (2)' }))
+    const note = await screen.findByText(/Open Library is temporarily unavailable\. You can try again in about a minute/)
+    expect(note).toHaveTextContent('Your library is unchanged.')
+    expect(screen.queryByText(/asked us to slow down/)).not.toBeInTheDocument()
+    expect(requests.filter(r => r.url === '/books/covers/enrich')).toHaveLength(1)   // no automatic retry
   })
 
   it('shows no cover controls when every book with an ISBN already has one', async () => {
