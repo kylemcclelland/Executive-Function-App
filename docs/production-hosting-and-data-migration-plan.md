@@ -130,6 +130,8 @@ development id can never match a production sign-in, so it is dead weight. The s
 when they own nothing but the Google credential rows described above, and stops if they own anything else.
 
 ### 5.3 Steps (each waits for your explicit go-ahead)
+*The step-by-step runbook is now `docs/deployment-runbook.md`; backups are `docs/backup-and-restore.md`; the ownership claim is `docs/clerk-ownership-transfer-runbook.md`.*
+
 1. **Prepare (no data).** Create the Neon project and Railway project; add the Dockerfile; set environment
    variables; create the Clerk **production** instance and Google redirect URI (see 6). Deploy the backend
    against the **empty** Neon database. Smoke-test `/health` and sign-in. Nothing from your real data yet.
@@ -153,10 +155,11 @@ or verification fails, drop the Neon database (or restore the branch) and repeat
 
 ## 6. Blockers and decisions for you
 
-1. **A domain you own.** As I understand Clerk's and Google's rules (please confirm on their docs), a Clerk
-   *production* instance requires your own domain (not `*.vercel.app`), and Google verification needs a
-   verified domain plus a privacy policy. Until then, Clerk stays on its development instance and Google stays
-   in Testing (test users only). Decide whether to buy a domain now.
+1. **A domain you own** (investigated; see `docs/deployment-runbook.md` section 1). Clerk's docs require a domain you own
+   with DNS access for a *production* instance and say production keys cannot currently be used on a
+   host-provided `*.vercel.app` domain. Google accepts a `vercel.app` redirect URI (it is on the Public Suffix
+   List) in Testing mode, but verification needs a verified domain, a homepage and a privacy policy. So: staging on
+   the Vercel URL now (Clerk development instance, Google Testing), a custom domain before any public launch.
 2. **Approve the hosting choice** (Railway + Neon + Vercel, about $5/month), or pick an alternative above.
 3. **The four open ownership questions** from `docs/clerk-data-migration-plan.md`: your production Clerk
    user id (only exists after step 5), whether the claim may delete the empty auto-created row, which timezone
