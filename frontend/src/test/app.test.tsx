@@ -161,7 +161,8 @@ describe('Today is intentional, not automatic', () => {
     await screen.findByText('Earlier tasks')
     expect(screen.getAllByRole('button', { name: 'Bring to today' })).toHaveLength(3)
     expect(screen.getByText('Showing 3 of 5 earlier tasks. Nothing has been changed.')).toBeInTheDocument()
-    expect(screen.queryByText('Water the plants')).not.toBeInTheDocument()
+    const earlier = screen.getByText('Earlier tasks').closest('.card') as HTMLElement
+    expect(within(earlier).queryByText('Water the plants')).not.toBeInTheDocument()
     expect(writes()).toHaveLength(0)
     await user.click(screen.getByRole('link', { name: 'See all tasks' }))
     await screen.findByRole('button', { name: 'Water the plants' })
@@ -425,13 +426,6 @@ describe('Preferences, dates, and resilient navigation', () => {
     failPath = ''
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     await screen.findByRole('button', { name: 'Write the first paragraph' })
-  })
-  it.each(['/calendar'])('labels %s explicitly as a later milestone', async path => {
-    const user = setup(path)
-    expect(screen.getByText('Later milestone')).toBeInTheDocument()
-    expect(fetchMock).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('link', { name: 'Back to Today' }))
-    await screen.findByRole('heading', { name: 'Today' })
   })
   it('handles empty 204 responses without parsing JSON', async () => {
     await expect(api('/tasks/a', 'DELETE')).resolves.toBeUndefined()

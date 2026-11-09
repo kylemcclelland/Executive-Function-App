@@ -24,7 +24,11 @@ class Timestamps:
 
 class User(Timestamps, Base):
     __tablename__ = "users"
+    __table_args__ = (Index("uq_users_clerk_user_id", "clerk_user_id", unique=True),)
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    # The verified Clerk user id (`sub`). NULL for the pre-authentication legacy user until its
+    # owner claims it, so no new account can ever reach that data by signing up.
+    clerk_user_id: Mapped[str | None] = mapped_column(String(255))
     timezone: Mapped[str] = mapped_column(String(100), default="UTC")
 
 
@@ -306,6 +310,57 @@ class NoteLink(Base):
     link_type: Mapped[str] = mapped_column(String(20))
     explanation: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+CONNECTION_STATUSES = ("active", "needs_reauth", "disconnected")
+
+
+class GoogleCalendarConnection(Base):
+    """A user's authorization to read one Google Calendar account. Holds no access token.
+
+    The refresh token is stored only encrypted. Version 1 allows one live connection per user (the
+    partial unique index); supporting several accounts later means replacing that index with
+    ``UNIQUE (user_id, google_account_identifier)``. ``disconnected`` rows keep no token.
+    """
+
+    __tablename__ = "google_calendar_connections"
+    __table_args__ = (
+        CheckConstraint(
+            f"connection_status IN ({_in_list(CONNECTION_STATUSES)})", name="gcal_status",
+        ),
+        Index(
+            "uq_gcal_one_live_connection_per_user", "user_id", unique=True,
+            sqlite_where=text("connection_status <> 'disconnected'"),
+            postgresql_where=text("connection_status <> 'disconnected'"),
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    google_account_identifier: Mapped[str | None] = mapped_column(String(255))
+    google_account_email: Mapped[str | None] = mapped_column(String(320))
+    encrypted_refresh_token: Mapped[str | None] = mapped_column(Text)
+    granted_scopes: Mapped[str] = mapped_column(Text, default="")
+    connected_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, onupdate=utcnow)
+    last_successful_sync_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    connection_status: Mapped[str] = mapped_column(String(20), default="active")
+
+
+class GoogleOAuthState(Base):
+    """One pending authorization attempt: expiring, single use, bound to the initiating user.
+
+    Only a hash of the state value is stored; the PKCE verifier is stored encrypted.
+    """
+
+    __tablename__ = "google_oauth_states"
+    __table_args__ = (Index("ix_google_oauth_states_expires", "expires_at"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    encrypted_code_verifier: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    consumed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
 class CoverLookup(Base):

@@ -5,11 +5,21 @@ import { ArrowRight, ArrowUp, Check, ChevronRight, FolderOpen, Feather, Inbox, P
 import { Button, Card, Dialog } from '../components/ui'
 import { Empty, ErrorMessage, Loading, PageHeader } from '../components/common'
 import { Capture } from '../components/Capture'
+import { UpcomingEvents } from '../components/calendar/UpcomingEvents'
+import { TodayTasks } from '../components/today/TodayTasks'
+import { ReadingCard } from '../components/today/ReadingCard'
+import { LiturgyCard } from '../components/today/LiturgyCard'
 import { TaskRow } from '../components/tasks/TaskRow'
 import { api } from '../services/api'
 import { useAction } from '../hooks/useAction'
 import type { Task, TodayData } from '../types'
 import { formatDate } from '../lib/utils'
+
+function greeting(timeZone?: string, now = new Date()) {
+  let hour = now.getHours()
+  try { hour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone }).format(now)) } catch { /* unknown zone: use the device clock */ }
+  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+}
 
 export function TodayPage() {
   const query = useQuery({ queryKey: ['today'], queryFn: () => api<TodayData>('/today'), refetchInterval: 60_000 })
@@ -22,7 +32,7 @@ export function TodayPage() {
   function save(ids: string[]) { void action.run(() => api('/today/priorities', 'PUT', { task_ids: ids })) }
   const available = tasksQuery.data?.filter(task => task.status !== 'completed' && !priorities.some(p => p.id === task.id)) ?? []
   return <>
-    <PageHeader eyebrow={data ? formatDate(data.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'Today'} title="Today" action={<span className="today-badge"><Sun size={14} /> Age quod agis</span>}>Choose what matters, then give it your full attention.</PageHeader>
+    <PageHeader eyebrow={data ? formatDate(data.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'Today'} title="Today" action={<span className="today-badge"><Sun size={14} /> <span lang="la">Unum est necessarium</span></span>}>{greeting(data?.timezone)}. Choose what matters, then give it your full attention.</PageHeader>
     <div className="today-layout"><div className="main-column">
       <Card className="focus-card"><div className="section-heading"><div><p className="eyebrow">WHAT MATTERS TODAY</p><h2>Today’s Priorities <span className="count">{priorities.length} / 3</span></h2></div><span className="sun-illustration"><Sun size={34} strokeWidth={1.3} /></span></div>
         <p className="muted">Choose up to three. Everything else can wait.</p>
@@ -36,6 +46,7 @@ export function TodayPage() {
           <ErrorMessage message={action.error} />
         </>}
       </Card>
+      <TodayTasks tasks={available} canPrioritize={priorities.length < 3} busy={action.pending} onPrioritize={id => save([...priorities.map(t => t.id), id])} />
       {previousTasks.length > 0 && <Card>
         <div className="section-title"><RotateCcw size={17} /><h2>Earlier tasks</h2></div>
         <p className="muted">From earlier days. Bring one forward only if it still matters.</p>
@@ -53,9 +64,10 @@ export function TodayPage() {
       </Card>}
       <Capture />
       {!!data?.completed_tasks.length && <details className="completed-section"><summary><Check size={16} /> Completed today ({data.completed_tasks.length})</summary><Card>{data.completed_tasks.map(task => <TaskRow key={task.id} task={task} />)}</Card></details>}
-    </div><aside className="day-aside"><Card className="encouragement"><span className="line-art"><Feather size={46} strokeWidth={1.1} /></span><p className="eyebrow">AGE QUOD AGIS</p><h2>Do what<br />you are doing.</h2><p>Give the task in front of you<br />your full attention.</p><span className="tiny-rule" /></Card>
+    </div><aside className="day-aside"><UpcomingEvents timeZone={data?.timezone} /><ReadingCard /><LiturgyCard />
       <Link to="/inbox" className="inbox-link"><span className="small-icon"><Inbox size={20} /></span><div><strong>Inbox</strong><p>{data ? `${data.inbox_count} unprocessed ${data.inbox_count === 1 ? 'thought' : 'thoughts'} in your inbox` : 'Your inbox is here when you’re ready'}</p></div><ChevronRight size={18} /></Link>
       {data && <p className="timezone-note">Your day follows {data.timezone.replaceAll('_', ' ')}.<br /><Link to="/settings">Change timezone</Link></p>}
+      <Card className="encouragement"><span className="line-art"><Feather size={40} strokeWidth={1.1} /></span><p className="eyebrow">LUKE 10:42</p><h2 lang="la">Unum est<br />necessarium.</h2><p>One thing is necessary.<br />Give it your full attention.</p><span className="tiny-rule" /></Card>
     </aside></div>
     {choosing && <Dialog open onOpenChange={setChoosing} title="What matters today?" description="Choose an incomplete task. You can make room for up to three.">
       {tasksQuery.isPending ? <Loading /> : tasksQuery.isError ? <><ErrorMessage message={tasksQuery.error.message} /><Button variant="outline" onClick={() => void tasksQuery.refetch()}>Retry tasks</Button></> : available.length ? <div className="choice-list">{available.map(task => <button key={task.id} disabled={action.pending || priorities.length >= 3} className="task-choice" onClick={() => void action.run(() => api('/today/priorities', 'PUT', { task_ids: [...priorities.map(t => t.id), task.id] }), () => setChoosing(false))}><span><strong>{task.title}</strong>{task.next_action && <small>{task.next_action}</small>}</span><Plus size={18} /></button>)}</div> : <Empty title="A little room for something new">Create a task on the Tasks page, then choose it here.<br /><Link to="/tasks" onClick={() => setChoosing(false)}>Go to tasks →</Link></Empty>}

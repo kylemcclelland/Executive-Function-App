@@ -3,7 +3,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 from sqlalchemy import event, func, select
 
 from app.core.config import Settings
@@ -319,19 +318,17 @@ def test_commit_failure_never_returns_success(application, method, path, payload
         assert client.get("/api/today").json()["priorities"] == []
 
 
-def test_production_fails_closed_and_forbids_dev_identity():
-    with pytest.raises(ValidationError, match="forbidden"):
-        Settings(app_env="production", dev_user_id=uuid4(), _env_file=None)
-    with pytest.raises(RuntimeError, match="authentication"):
+def test_production_refuses_to_start_without_clerk():
+    with pytest.raises(RuntimeError, match="Clerk"):
         create_app(Settings(app_env="production", _env_file=None))
 
 
 def test_missing_environment_defaults_to_fail_closed(monkeypatch):
-    monkeypatch.delenv("APP_ENV", raising=False)
-    monkeypatch.delenv("DEV_USER_ID", raising=False)
+    for name in ("APP_ENV", "CLERK_SECRET_KEY", "CLERK_JWT_KEY"):
+        monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None)
     assert settings.app_env == "production"
-    with pytest.raises(RuntimeError, match="authentication"):
+    with pytest.raises(RuntimeError, match="Clerk"):
         create_app(settings)
 
 
@@ -345,13 +342,6 @@ def test_infrastructure_environment_config(monkeypatch, origins):
     settings = Settings(_env_file=None)
     assert settings.dev_user_timezone == "America/New_York"
     assert settings.cors_origins == ["http://localhost:5173", "http://127.0.0.1:5173"]
-
-
-def test_request_guard_if_environment_changes(client, application):
-    application.state.settings.app_env = "production"
-    assert client.get("/api/tasks").status_code == 503
-    assert client.get("/api/inbox").status_code == 503
-    assert client.get("/api/user").status_code == 503
 
 
 def test_task_delete_cascades_steps_and_priorities(client, application):

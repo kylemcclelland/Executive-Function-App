@@ -1,5 +1,5 @@
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
@@ -7,7 +7,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from ..core.config import DEFAULT_USER_ID
 from ..models import (
     Book,
     InboxItem,
@@ -32,24 +31,51 @@ def get_session(request: Request):
 DB = Annotated[Session, Depends(get_session, scope="function")]
 
 
+def require_authentication(request: Request) -> str:
+    """The verified Clerk user id for this request; rejects anything unauthenticated.
+
+    Applied to every protected router, so a new endpoint is protected without having to remember.
+    Verified once per request; the token is the only source of identity.
+    """
+    clerk_user_id = getattr(request.state, "clerk_user_id", None)
+    if clerk_user_id is None:
+        authenticate = request.app.state.authenticator
+        if authenticate is None:
+            raise HTTPException(503, "Authentication is not configured")
+        clerk_user_id = request.state.clerk_user_id = authenticate(request)
+    return clerk_user_id
+
+
+def ensure_user(db: Session, clerk_user_id: str, timezone: str) -> User:
+    """The account for a verified Clerk user, created empty on first sight.
+
+    Accounts are looked up by ``clerk_user_id`` only. The legacy pre-authentication user has none,
+    so a new sign-up can never be matched to (or see) data that existed before authentication.
+    """
+    # Serialize mutations for one identity, including first conversion and daily list replacement.
+    statement = select(User).where(User.clerk_user_id == clerk_user_id).with_for_update()
+    user = db.scalar(statement)
+    if user is None:
+        insert = pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
+        db.execute(
+            insert(User).values(id=uuid4(), clerk_user_id=clerk_user_id, timezone=timezone)
+            .on_conflict_do_nothing(index_elements=["clerk_user_id"])
+        )
+        user = db.scalar(statement)
+    return user
+
+
 def current_user_id(request: Request) -> UUID:
-    """The authenticated identity, without touching the database."""
-    settings = request.app.state.settings
-    if settings.app_env not in {"development", "test"}:
-        raise HTTPException(503, "Authentication is not configured")
-    return settings.dev_user_id or DEFAULT_USER_ID
+    """The authenticated user's id, via its own short transaction (for handlers with no session)."""
+    clerk_user_id = require_authentication(request)
+    with request.app.state.session_factory() as session, session.begin():
+        return ensure_user(session, clerk_user_id, request.app.state.settings.dev_user_timezone).id
 
 
 def get_user(request: Request, db: DB) -> User:
-    settings = request.app.state.settings
-    user_id = current_user_id(request)
-    insert = pg_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
-    db.execute(
-        insert(User).values(id=user_id, timezone=settings.dev_user_timezone)
-        .on_conflict_do_nothing(index_elements=["id"])
+    return ensure_user(
+        db, require_authentication(request), request.app.state.settings.dev_user_timezone,
     )
-    # Serialize mutations for one identity, including first conversion and daily list replacement.
-    return db.scalar(select(User).where(User.id == user_id).with_for_update())
 
 
 CurrentUser = Annotated[User, Depends(get_user)]

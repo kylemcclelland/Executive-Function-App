@@ -260,3 +260,32 @@ export interface BookPage {
   page_size: number
   total_pages: number
 }
+
+export interface CalendarStatus {
+  configured: boolean
+  status: 'not_connected' | 'active' | 'needs_reauth'
+  account_email: string | null
+  connected_at: string | null
+  last_successful_sync_at: string | null
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  all_day: boolean
+  start: string | null
+  end: string | null
+  time_zone: string | null
+  start_date: string | null
+  end_date: string | null
+  location: string | null
+  html_link: string | null
+  recurring: boolean
+}
+
+export interface CalendarEventsPage {
+  events: CalendarEvent[]
+  next_page_token: string | null
+  time_min: string
+  time_max: string
+}

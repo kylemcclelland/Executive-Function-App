@@ -3,6 +3,17 @@ export class ApiError extends Error {
   constructor(message: string, status: number) { super(message); this.status = status }
 }
 
+type TokenSource = () => Promise<string | null>
+let tokenSource: TokenSource | null = null
+
+/** Supplies the signed-in user's Clerk session token for every API request. */
+export function setTokenSource(source: TokenSource | null) { tokenSource = source }
+
+async function authorize(headers: Record<string, string> = {}): Promise<Record<string, string>> {
+  const token = tokenSource ? await tokenSource() : null
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers
+}
+
 async function failure(response: Response, method: string): Promise<never> {
   const data = await response.json().catch(() => null)
   const detail = typeof data?.detail === 'string' ? data.detail : null
@@ -13,7 +24,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
   const response = await fetch(`/api${path}`, {
     method,
     signal,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: await authorize(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!response.ok) return failure(response, method)
@@ -22,7 +33,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
 
 /** Sends a file's raw bytes (e.g. a CSV) so the server can enforce size limits while reading. */
 export async function apiUpload<T>(path: string, file: File, contentType = 'text/csv'): Promise<T> {
-  const response = await fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': contentType }, body: file })
+  const response = await fetch(`/api${path}`, { method: 'POST', headers: await authorize({ 'Content-Type': contentType }), body: file })
   if (!response.ok) return failure(response, 'POST')
   return response.json()
 }

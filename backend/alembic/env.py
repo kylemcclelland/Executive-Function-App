@@ -9,6 +9,8 @@ from app.models import (  # noqa: F401
     CoverLookup,
     CoverServiceState,
     DailyPriority,
+    GoogleCalendarConnection,
+    GoogleOAuthState,
     InboxItem,
     Milestone,
     Note,

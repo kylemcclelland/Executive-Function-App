@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, select, text
 
 from ... import schemas as s
@@ -10,22 +10,36 @@ from ...db import utcnow
 from ...models import DailyPriority, InboxItem, Step, Task
 from ...services.projects import link_values, touch_project
 from ...services.today import today_view
-from ..dependencies import DB, CurrentUser, owned_inbox, owned_step, owned_task
+from ..dependencies import (
+    DB,
+    CurrentUser,
+    owned_inbox,
+    owned_step,
+    owned_task,
+    require_authentication,
+)
 from .book_import import router as book_import_router
 from .books import router as books_router
+from .google_calendar import callback_router as google_callback_router
+from .google_calendar import router as google_calendar_router
 from .notes import router as notes_router
 from .projects import router as projects_router
 from .work_sessions import router as work_sessions_router
 
-router = APIRouter()
+# Everything except the health check requires a verified Clerk session.
+public_router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authentication)])
 router.include_router(projects_router)
 router.include_router(book_import_router)
 router.include_router(books_router)
 router.include_router(notes_router)
 router.include_router(work_sessions_router)
+router.include_router(google_calendar_router)
+# Google redirects the browser here without a Clerk token; `state` authenticates it instead.
+public_router.include_router(google_callback_router)
 
 
-@router.get("/health")
+@public_router.get("/health")
 def health(db: DB):
     try:
         db.execute(text("SELECT 1"))
