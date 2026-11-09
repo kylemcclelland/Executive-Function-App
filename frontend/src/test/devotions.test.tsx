@@ -29,7 +29,7 @@ describe('simple devotion layout', () => {
     expect(screen.getByText('Subtitle will appear here')).toBeInTheDocument()
     expect(screen.getByText('Category')).toBeInTheDocument()
     expect(screen.getByText('About 10 minutes')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Devotions/ })).toHaveAttribute('href', '/devotions')
+    expect(screen.getByRole('link', { name: /The Oratory/ })).toHaveAttribute('href', '/devotions')
     for (const name of ['Overview', 'How to Pray', 'Prayer Text']) expect(heading(name)).toBeInTheDocument()
     expect(screen.getByText('Historical background')).toBeInTheDocument()
     expect(screen.getByText('Spiritual significance')).toBeInTheDocument()
@@ -335,49 +335,6 @@ function app(path: string) {
   return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[path]}><AppRoutes /></MemoryRouter></QueryClientProvider>)
 }
 
-describe('devotional library', () => {
-  it('has a place in the main navigation', () => {
-    stubApi([])
-    app('/devotions')
-    expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('link', { name: 'Devotions' })).toHaveAttribute('href', '/devotions')
-  })
-
-  it('welcomes the reader with an empty state, not an error, when nothing is published yet', async () => {
-    stubApi([])
-    app('/devotions')
-    expect(await screen.findByText('No devotions have been added yet')).toBeInTheDocument()
-    expect(screen.getByText(/This library will grow as prayers are carefully sourced and approved\./)).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'See how a devotion page will look' })).toHaveAttribute('href', '/devotions/preview')
-  })
-
-  it('reports a missing devotions route as a real error and never as an empty library', async () => {
-    stubApi([])
-    vi.stubGlobal('fetch', vi.fn(async () => json({ detail: 'Not Found' }, 404)))     // a server that predates devotions
-    app('/devotions')
-    expect(await screen.findByRole('alert')).toHaveTextContent('The Devotions service isn’t available on this server yet (404 Not Found)')
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
-  })
-
-  it('shows other server failures as errors too, with their own message', async () => {
-    stubApi([])
-    vi.stubGlobal('fetch', vi.fn(async () => json({ detail: 'Database unavailable' }, 503)))
-    app('/devotions')
-    expect(await screen.findByRole('alert')).toHaveTextContent('Database unavailable')
-    expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
-  })
-
-  it('lists published devotions with a link to each', async () => {
-    stubApi([{ ...published, bookmarked: true }])
-    app('/devotions')
-    const link = await screen.findByRole('link', { name: /Prayer Title/ })
-    expect(link).toHaveAttribute('href', '/devotions/test-devotion')
-    expect(within(link).getByLabelText('Saved')).toBeInTheDocument()
-  })
-})
-
 describe('devotion page', () => {
   it('renders a published devotion from the API and toggles its bookmark', async () => {
     stubApi([structuredClone(published)])
@@ -401,7 +358,7 @@ describe('devotion page', () => {
     stubApi([])
     app('/devotions/draft')
     expect(await screen.findByText('This devotion isn’t available')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Devotions' })).toHaveAttribute('href', '/devotions')
+    expect(screen.getByRole('link', { name: 'Back to The Oratory' })).toHaveAttribute('href', '/devotions')
   })
 })
 

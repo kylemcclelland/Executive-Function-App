@@ -12,7 +12,7 @@ function Paragraphs({ text, className }: { text: string; className?: string }) {
 export function DevotionHeader({ devotion, backTo, onToggleBookmark, bookmarkPending }: { devotion: Devotion; backTo: string; onToggleBookmark?: (next: boolean) => void; bookmarkPending?: boolean }) {
   const duration = durationLabel(devotion.estimated_minutes)
   return <header className="devotion-header">
-    <Link to={backTo} className="devotion-back"><ArrowLeft size={16} aria-hidden="true" /> Devotions</Link>
+    <Link to={backTo} className="devotion-back"><ArrowLeft size={16} aria-hidden="true" /> The Oratory</Link>
     <div className="devotion-title-row">
       <div className="devotion-titles">
         <h1 id="devotion-title">{devotion.title}</h1>

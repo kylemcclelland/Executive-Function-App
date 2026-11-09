@@ -18,7 +18,7 @@ export function DevotionPage() {
   if (query.isPending) return <Loading />
   if (query.isError) {
     return query.error instanceof ApiError && query.error.status === 404
-      ? <Empty title="This devotion isn’t available">It may not have been published yet. <Link to="/devotions">Back to Devotions</Link>.</Empty>
+      ? <Empty title="This devotion isn’t available">It may not have been published yet. <Link to="/devotions">Back to The Oratory</Link>.</Empty>
       : <><ErrorMessage message={query.error.message} /><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></>
   }
   return <>

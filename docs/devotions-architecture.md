@@ -121,6 +121,23 @@ API, **not an interface**: there is no editorial dashboard and no public approva
   focus-trapped dialog with Escape, 40 to 46 px touch targets, design-token colours only (light and dark both audited
   for contrast with no findings at 390 px and 1440 px), mobile-first CSS.
 
+## The Oratory (browsing the library)
+
+`/devotions` is **The Oratory**, the landing page for the published library (UI only: no backend change, no content).
+
+* **One request, filtered in the browser.** The page loads `GET /api/devotions` once; search and categories filter that list, so
+  typing sends nothing. Search matches every word against the **title, subtitle (the short description) and category**,
+  ignoring case, accents and extra spaces. (The list payload carries no overview text, so overview wording is not searched.)
+* **Categories** are All Devotions, Daily Prayer, Our Lord, Our Lady, Saints, Liturgical Seasons and Other. A devotion's free-text
+  `category` is matched to these case-insensitively; **anything else, or none, appears under Other.** When entering real content,
+  use these exact names for the category if you want it under a specific tab.
+* **Saved devotions** are the reader's bookmarked published devotions (from the same list). They are not narrowed by search or category.
+* Search and category live in the address (`?q=...&category=our-lady`), so Back from a devotion returns to the same view.
+* **States are distinct.** An empty library ("No devotions have been added yet..."), a category with nothing in it, a search with no
+  matches, and nothing saved each have their own message. **401, 403, 404, server errors (5xx) and network failures are errors**
+  with their own wording and are never shown as an empty library; 403 offers no retry.
+* No streaks, scores, percentages, reminders or analytics, and browsing stores nothing.
+
 ## Tests
 
 * `backend/tests/test_devotions.py`: authorization, workflow, source requirements, per-language approval,

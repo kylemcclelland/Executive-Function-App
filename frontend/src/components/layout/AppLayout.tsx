@@ -8,7 +8,7 @@ const navigation = [
   { path: '/', label: 'Today', icon: Sun }, { path: '/inbox', label: 'Inbox', icon: Inbox },
   { path: '/tasks', label: 'Tasks', icon: ListTodo }, { path: '/calendar', label: 'Calendar', icon: CalendarDays },
   { path: '/projects', label: 'Projects', icon: FolderOpen }, { path: '/library', label: 'Library', icon: Library }, { path: '/notes', label: 'Notes', icon: NotebookPen },
-  { path: '/devotions', label: 'Devotions', icon: Cross },
+  { path: '/devotions', label: 'The Oratory', icon: Cross },
 ]
 
 export function AppLayout({ children, profile }: { children: ReactNode; profile?: ReactNode }) {

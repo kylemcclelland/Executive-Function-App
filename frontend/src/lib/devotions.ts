@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
-import type { Devotion, LanguageChoice, LicenseStatus, PrayerText, TextSize } from '../types/devotions'
+import { ApiError } from '../services/api'
+import type { Devotion, DevotionBrief, LanguageChoice, LicenseStatus, PrayerText, TextSize } from '../types/devotions'
 
 const LANGUAGE_NAMES: Record<string, string> = { en: 'English', la: 'Latin' }
 /** Latin before English before anything else, so a bilingual pair always reads in the same order. */
@@ -89,4 +90,54 @@ export function useReadingPreferences() {
   }), [])
   const setLanguage = useCallback((choice: LanguageChoice) => { remember(LANGUAGE_KEY, choice); setLanguageState(choice) }, [])
   return { size, larger: () => step(1), smaller: () => step(-1), canGrow: size !== 'xlarge', canShrink: size !== 'normal', language, setLanguage }
+}
+
+// ---- Browsing the library (The Oratory) -------------------------------------------------------
+export const LIBRARY_CATEGORIES = [
+  { key: 'daily-prayer', label: 'Daily Prayer' },
+  { key: 'our-lord', label: 'Our Lord' },
+  { key: 'our-lady', label: 'Our Lady' },
+  { key: 'saints', label: 'Saints' },
+  { key: 'liturgical-seasons', label: 'Liturgical Seasons' },
+  { key: 'other', label: 'Other' },
+] as const
+export type CategoryKey = typeof LIBRARY_CATEGORIES[number]['key']
+
+/** Lower-case, accent-free, single-spaced: so "Pater", "pater " and "PÁTER" are the same search. */
+export function normalizeText(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/** The library category a devotion's free-text category belongs under. Anything unrecognised, or absent, is Other. */
+export function categoryKeyOf(category: string | null): CategoryKey {
+  const wanted = normalizeText(category ?? '')
+  return LIBRARY_CATEGORIES.find(item => normalizeText(item.label) === wanted)?.key ?? 'other'
+}
+
+export const categoryLabel = (key: CategoryKey) => LIBRARY_CATEGORIES.find(item => item.key === key)!.label
+
+export function isCategoryKey(value: string | null): value is CategoryKey {
+  return LIBRARY_CATEGORIES.some(item => item.key === value)
+}
+
+/** Every search word must appear in the title, the short description (subtitle) or the category. */
+export function matchesSearch(devotion: DevotionBrief, query: string): boolean {
+  const words = normalizeText(query).split(' ').filter(Boolean)
+  if (words.length === 0) return true
+  const haystack = normalizeText([devotion.title, devotion.subtitle, devotion.category].filter(Boolean).join(' '))
+  return words.every(word => haystack.includes(word))
+}
+
+export type LibraryErrorKind = 'unauthenticated' | 'forbidden' | 'unavailable' | 'server' | 'network' | 'other'
+
+/** Each failure is told apart: none of them may ever be mistaken for an empty library. */
+export function describeLibraryError(error: unknown): { kind: LibraryErrorKind; message: string } {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return { kind: 'unauthenticated', message: 'Your session couldn’t be verified. Please sign in again.' }
+    if (error.status === 403) return { kind: 'forbidden', message: 'Your account doesn’t have access to the devotional library.' }
+    if (error.status === 404) return { kind: 'unavailable', message: 'The devotional library isn’t available on this server yet (404 Not Found). The server probably needs to be updated.' }
+    if (error.status >= 500) return { kind: 'server', message: `The devotional library is temporarily unavailable (server error ${error.status}). Please try again in a moment.` }
+    return { kind: 'other', message: error.message }
+  }
+  return { kind: 'network', message: 'We couldn’t reach the server. Check your connection and try again.' }
 }
