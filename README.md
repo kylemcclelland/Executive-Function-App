@@ -110,6 +110,13 @@ a new Clerk account gets a new, empty account. Data created before authenticatio
 belongs to a legacy user with no Clerk link, so no sign-up can see it until the owner
 claims it deliberately: see [docs/clerk-data-migration-plan.md](docs/clerk-data-migration-plan.md).
 
+### Devotions (framework only)
+
+A reusable prayer/devotion page and an editorial approval workflow exist, with **no prayer content added or
+published**. Content needs a cited source, separate approval of the exact wording, and an explicit editor or approver
+role set in `EDITOR_CLERK_USER_IDS` / `APPROVER_CLERK_USER_IDS` (empty by default: nobody). See
+[docs/devotions-architecture.md](docs/devotions-architecture.md).
+
 ### Clerk dashboard setup
 
 Menu names change over time; the settings, not the labels, are what matter.

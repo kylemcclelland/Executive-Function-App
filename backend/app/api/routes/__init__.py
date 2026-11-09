@@ -20,6 +20,8 @@ from ..dependencies import (
 )
 from .book_import import router as book_import_router
 from .books import router as books_router
+from .devotions import editorial_router as devotions_editorial_router
+from .devotions import router as devotions_router
 from .google_calendar import callback_router as google_callback_router
 from .google_calendar import router as google_calendar_router
 from .notes import router as notes_router
@@ -33,6 +35,8 @@ router.include_router(projects_router)
 router.include_router(book_import_router)
 router.include_router(books_router)
 router.include_router(notes_router)
+router.include_router(devotions_router)
+router.include_router(devotions_editorial_router)
 router.include_router(work_sessions_router)
 router.include_router(google_calendar_router)
 # Google redirects the browser here without a Clerk token; `state` authenticates it instead.

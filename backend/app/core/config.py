@@ -46,14 +46,30 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173", "http://127.0.0.1:5173",
     ]
+    # Devotional content is approved by hand. Nobody holds either role unless their verified Clerk
+    # user id is listed here, so no user, however signed in, can edit or approve content by default.
+    # Editors enter and verify sourced content; approvers approve and publish it. Never settable
+    # through the API.
+    editor_clerk_user_ids: Annotated[list[str], NoDecode] = []
+    approver_clerk_user_ids: Annotated[list[str], NoDecode] = []
 
-    @field_validator("cors_origins", "clerk_authorized_parties", mode="before")
+    @field_validator(
+        "cors_origins", "clerk_authorized_parties", "editor_clerk_user_ids",
+        "approver_clerk_user_ids", mode="before",
+    )
     @classmethod
     def parse_origins(cls, value):
         if isinstance(value, str):
             if value.lstrip().startswith("["):
                 return json.loads(value)
             return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @field_validator("editor_clerk_user_ids", "approver_clerk_user_ids")
+    @classmethod
+    def clerk_user_ids(cls, value: list[str]) -> list[str]:
+        if bad := [item for item in value if not item.startswith("user_")]:
+            raise ValueError(f"not Clerk user ids (expected user_...): {bad}")
         return value
 
     @field_validator("dev_user_timezone")
