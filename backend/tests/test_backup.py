@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
@@ -136,7 +137,7 @@ def test_backup_verifies_and_leaves_the_database_untouched(application, monkeypa
     assert code == 0, output
     (backup,) = tmp_path.glob("optima-pars-*.sqlite")
     manifest = json.loads(backup.with_suffix(".manifest.json").read_text())
-    assert manifest["alembic_revision"] == "0009"
+    assert manifest["alembic_revision"] == ScriptDirectory.from_config(Config(str(BACKEND / "alembic.ini"))).get_current_head()
     assert manifest["tables"]["books"]["rows"] == 1 and manifest["tables"]["users"]["rows"] == 2
     assert manifest["file"]["bytes"] == backup.stat().st_size
     assert counts(url) == before                                      # the source never changed

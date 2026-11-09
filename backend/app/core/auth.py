@@ -9,6 +9,7 @@ import logging
 from collections.abc import Callable
 from types import SimpleNamespace
 
+import jwt
 from clerk_backend_api.security import AuthenticateRequestOptions, authenticate_request
 from clerk_backend_api.security.types import TokenVerificationErrorReason
 from fastapi import HTTPException, Request
@@ -32,6 +33,18 @@ def unauthorized() -> HTTPException:
     return HTTPException(
         401, "Authentication required", headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def _origin_hint(token: str, reason) -> str:
+    """For an origin mismatch, name the origin the token claims, so the setting can be corrected."""
+    if reason != TokenVerificationErrorReason.TOKEN_INVALID_AUTHORIZED_PARTIES:
+        return ""
+    try:
+        origin = jwt.decode(token, options={"verify_signature": False}).get("azp")
+    except jwt.PyJWTError:
+        return ""
+    origin = origin[:120] if isinstance(origin, str) else None
+    return f" (token origin {origin!r} is not in CLERK_AUTHORIZED_PARTIES)"
 
 
 class ClerkAuthenticator:
@@ -61,7 +74,11 @@ class ClerkAuthenticator:
             logger.exception("Session token verification failed unexpectedly")
             raise HTTPException(503, "Authentication is temporarily unavailable") from exc
         if not state.is_signed_in or state.payload is None:
-            logger.info("Rejected session token: %s", state.reason and state.reason.value[0])
+            # A warning so the reason shows in hosted logs: a reason code and, for an origin
+            # mismatch, the claimed origin. Never the token itself.
+            reason = state.reason and state.reason.value[0]
+            hint = _origin_hint(token, state.reason)
+            logger.warning("Rejected session token: %s%s", reason, hint)
             if state.reason in _UNAVAILABLE:
                 raise HTTPException(503, "Authentication is temporarily unavailable")
             raise unauthorized()

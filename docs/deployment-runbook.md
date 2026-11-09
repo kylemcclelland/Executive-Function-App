@@ -1,7 +1,7 @@
 # Deployment runbook: Vercel + Railway + Neon
 
 Approved architecture: **Vercel** (frontend) + **Railway** (one FastAPI container) + **Neon** (PostgreSQL).
-Nothing below has been executed. Each numbered step in "Stage 1" needs your explicit go-ahead.
+Stage 1 steps 1 to 9 below have been executed (see section 0); step 10 (reconnect Google Calendar) and step 11 (promote) have not.
 
 ## 0. Current status: Stage 1 private staging is live (2026-11-09)
 
@@ -9,7 +9,7 @@ Nothing below has been executed. Each numbered step in "Stage 1" needs your expl
 |---|---|---|
 | Frontend | Vercel project `optima-pars`; staging URL `https://optima-pars-git-copilot-build-mvp-0-1-kyle-f16c.vercel.app` (branch alias of `copilot/build-mvp-0-1`) | Deployment Protection is **on for all deployments, including the production alias** |
 | Backend | Railway project `optima-pars-staging`, service `api` (one replica), public API host `https://api-production-1a18.up.railway.app` | Image built from `backend/Dockerfile`; migrations 0001 to 0009 applied on first start |
-| Database | Neon project `optima-pars-staging` (id `summer-snow-16078087`, AWS us-east-1, PostgreSQL 18, Free plan, direct connection, `sslmode=require`) | **Empty**: no SQLite data has been migrated |
+| Database | Neon project `optima-pars-staging` (id `summer-snow-16078087`, AWS us-east-1, PostgreSQL 18, Free plan, direct connection, `sslmode=require`) | **Holds the migrated data** (2026-11-09): the local SQLite database was copied in one verified transaction (2,170 books, 3 projects, 5 notes, 4 tasks, 2 inbox items, and the rest; every table matched value for value) and claimed by the owner's Clerk account. The local file was only read. The development account's Google Calendar rows were deliberately left behind, so Google Calendar must be reconnected on staging. See the migration record below |
 | Auth | Clerk **development** instance; sign-ups restricted to one allowlisted email | A non-allowlisted sign-up is refused |
 
 Verified on staging with a temporary Clerk test user (since deleted): signed-out visitors are sent to `/sign-in` and the app makes no API calls; a Clerk-signed session reaches Today, Tasks, Inbox, Projects, Calendar, Library, Notes and Preferences with every API call returning 200; calls without a token return 401; a new account gets the timezone `America/New_York`. Browser-visible API paths all go through the Vercel `/api` rewrite.
@@ -21,6 +21,23 @@ token is sent), so Today's Priorities, Tasks, Projects, Notes and Library all fa
 `/sign-in` and so on 404 too. Nothing is wrong with the backend or the frontend code. Merging the branch (or its
 `frontend/vercel.json`) into `main` fixes that alias with no other change; Deployment Protection stays on either way.
 Also: Clerk's own sign-in screens still say "Studium" because that is the application name in the Clerk dashboard; rename it there.
+
+**Every browser origin that serves the app must be listed in Railway's `CLERK_AUTHORIZED_PARTIES`** (comma-separated). A Clerk session token
+carries the origin it was issued for (`azp`); the backend rejects a valid, unexpired token from any other origin with `401 Authentication required`,
+and logs `Rejected session token: token-invalid-authorized-parties (token origin '...' is not in CLERK_AUTHORIZED_PARTIES)` (Railway logs).
+Currently listed: `https://optima-pars.vercel.app` and the branch alias `https://optima-pars-git-copilot-build-mvp-0-1-kyle-f16c.vercel.app`.
+Per-deployment URLs (`optima-pars-<hash>-kyle-f16c.vercel.app`) are deliberately not listed, so a session there gets 401. Add a custom domain here too when you have one.
+
+### Migration record (2026-11-09)
+
+1. Verified the signed-in Clerk account through Clerk's API (one user, verified email, development instance) and backed up the local SQLite database with SQLite's online backup API (integrity check ok, same row counts).
+2. Neon held only the empty account row created by signing in. `sqlite_to_postgres.py --allow-empty-accounts` accepts exactly that (and refuses anything else), leaves the row alone, and skips the local development account with its Google rows.
+3. Dry run, then `--execute`: one transaction, then every table compared value for value ("Every table matches the source exactly."). Independent check afterwards: 28 foreign keys, no orphaned references; relationship counts (tasks in projects, note tags, project notes, books with covers) equal to the source.
+4. A verified Neon backup was taken before the claim; `claim_legacy_data.py claim --instance test --timezone account` dry run, then `--execute --confirm-clerk-id`. It linked the legacy user to the Clerk account and removed the empty account row after verifying it owned nothing. Every row is now owned by the one Clerk-linked user, whose timezone is America/New_York.
+5. A second verified Neon backup was taken after the claim. The local SQLite file was byte-identical (SHA-256) before and after.
+6. Deployment Protection stayed on for both Vercel aliases (302); nothing was merged into `main`.
+
+Undo for the claim only: `UPDATE users SET clerk_user_id = NULL WHERE id = '00000000-0000-0000-0000-000000000001';`
 
 Known exposure: the Railway API host is public (Vercel cannot reach a private network). It serves only `/health` without a valid Clerk token issued for the staging origin, and it has no API docs. If you want it closed further, add an origin shared secret checked by the backend.
 
