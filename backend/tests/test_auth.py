@@ -276,3 +276,22 @@ def test_clerk_migration_is_additive_and_leaves_legacy_data_unlinked(application
         assert db.scalar(
             select(func.count()).select_from(Task).where(Task.user_id == LEGACY_USER_ID)
         ) == 1
+
+
+def test_a_token_for_an_unlisted_origin_is_rejected_and_the_reason_is_logged(application, caplog):
+    token = make_token(azp="https://optima-pars.example.com")
+    with caplog.at_level("WARNING", logger="app.auth"):
+        client = TestClient(application, headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/api/today")
+    assert response.status_code == 401
+    assert "token-invalid-authorized-parties" in caplog.text
+    assert "https://optima-pars.example.com" in caplog.text
+    assert "CLERK_AUTHORIZED_PARTIES" in caplog.text
+    assert token not in caplog.text and token.split(".")[1] not in caplog.text  # never the token
+
+
+def test_other_rejections_log_a_reason_but_a_missing_token_stays_quiet(application, caplog):
+    with caplog.at_level("WARNING", logger="app.auth"):
+        TestClient(application, headers={}).get("/api/today")  # probes and signed-out visitors
+        TestClient(application, headers={"Authorization": "Bearer not-a-jwt"}).get("/api/today")
+    assert caplog.text.count("Rejected session token") == 1
