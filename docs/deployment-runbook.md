@@ -14,6 +14,14 @@ Nothing below has been executed. Each numbered step in "Stage 1" needs your expl
 
 Verified on staging with a temporary Clerk test user (since deleted): signed-out visitors are sent to `/sign-in` and the app makes no API calls; a Clerk-signed session reaches Today, Tasks, Inbox, Projects, Calendar, Library, Notes and Preferences with every API call returning 200; calls without a token return 401; a new account gets the timezone `America/New_York`. Browser-visible API paths all go through the Vercel `/api` rewrite.
 
+**Use the branch alias, not `optima-pars.vercel.app`, until the branch is merged.** The production alias serves the
+last build of `main` (commit `52b17d0`), which predates `frontend/vercel.json`. With no rewrites, every `/api/*`
+call is answered by Vercel itself with `404 NOT_FOUND` (`x-vercel-error: NOT_FOUND`, even though a valid Clerk bearer
+token is sent), so Today's Priorities, Tasks, Projects, Notes and Library all fail, and direct loads of `/tasks`,
+`/sign-in` and so on 404 too. Nothing is wrong with the backend or the frontend code. Merging the branch (or its
+`frontend/vercel.json`) into `main` fixes that alias with no other change; Deployment Protection stays on either way.
+Also: Clerk's own sign-in screens still say "Studium" because that is the application name in the Clerk dashboard; rename it there.
+
 Known exposure: the Railway API host is public (Vercel cannot reach a private network). It serves only `/health` without a valid Clerk token issued for the staging origin, and it has no API docs. If you want it closed further, add an origin shared secret checked by the backend.
 
 ## 1. Can we start on the Vercel subdomain? (investigated)
