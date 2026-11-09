@@ -342,11 +342,31 @@ describe('devotional library', () => {
     expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('link', { name: 'Devotions' })).toHaveAttribute('href', '/devotions')
   })
 
-  it('explains that nothing is published yet, and points to the layout preview', async () => {
+  it('welcomes the reader with an empty state, not an error, when nothing is published yet', async () => {
     stubApi([])
     app('/devotions')
-    expect(await screen.findByText('No devotions have been published yet')).toBeInTheDocument()
+    expect(await screen.findByText('No devotions have been added yet')).toBeInTheDocument()
+    expect(screen.getByText(/This library will grow as prayers are carefully sourced and approved\./)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See how a devotion page will look' })).toHaveAttribute('href', '/devotions/preview')
+  })
+
+  it('reports a missing devotions route as a real error and never as an empty library', async () => {
+    stubApi([])
+    vi.stubGlobal('fetch', vi.fn(async () => json({ detail: 'Not Found' }, 404)))     // a server that predates devotions
+    app('/devotions')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The Devotions service isn’t available on this server yet (404 Not Found)')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
+  })
+
+  it('shows other server failures as errors too, with their own message', async () => {
+    stubApi([])
+    vi.stubGlobal('fetch', vi.fn(async () => json({ detail: 'Database unavailable' }, 503)))
+    app('/devotions')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database unavailable')
+    expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
   })
 
   it('lists published devotions with a link to each', async () => {

@@ -39,6 +39,16 @@ Per-deployment URLs (`optima-pars-<hash>-kyle-f16c.vercel.app`) are deliberately
 
 Undo for the claim only: `UPDATE users SET clerk_user_id = NULL WHERE id = '00000000-0000-0000-0000-000000000001';`
 
+### Devotions deployment (2026-11-09)
+
+The Devotions page showed `Not Found` because the Railway API (deployed by `railway up`, which a git push does not trigger) and
+the local backend both predated the devotions routes. Fix: a verified Neon backup (revision 0009), then `railway up --service api`
+(deployment `046d4c5e`), whose start-up ran `alembic upgrade head` (0009 to 0010: four new, empty tables). A second backup showed
+all 18 existing tables identical in content, and `/api/devotions` answers `200 []` for an authenticated account (no devotions or
+prayer texts exist, and no editor or approver role is set). Vercel redeployed the branch from git; protection stayed on.
+A token minted through Clerk's API has no `azp` and is correctly rejected, so authenticated checks need a browser on an authorized origin.
+`backup_postgres.py` now backs up a database that is one migration behind the code (the state just before migrating).
+
 Known exposure: the Railway API host is public (Vercel cannot reach a private network). It serves only `/health` without a valid Clerk token issued for the staging origin, and it has no API docs. If you want it closed further, add an origin shared secret checked by the backend.
 
 ## 1. Can we start on the Vercel subdomain? (investigated)

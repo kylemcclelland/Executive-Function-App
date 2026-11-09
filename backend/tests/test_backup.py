@@ -13,7 +13,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -146,6 +146,41 @@ def test_backup_verifies_and_leaves_the_database_untouched(application, monkeypa
     assert not password or password not in output + json.dumps(manifest)   # no secret in output or manifest
     code, output = run(monkeypatch, capsys, "verify", str(backup))
     assert code == 0 and output.startswith("OK")
+
+
+def present_counts(url) -> dict[str, int]:
+    """Row counts for the tables the database actually has (counts() assumes it matches the code)."""
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            names = inspect(connection).get_table_names()
+            return {name: connection.execute(text(f'SELECT count(*) FROM "{name}"')).scalar() for name in sorted(names)}
+    finally:
+        engine.dispose()
+
+
+@needs_postgres
+def test_a_database_one_migration_behind_the_code_can_be_backed_up_and_verified(application, monkeypatch, capsys, tmp_path):
+    """The backup taken just before a migration: the code already knows tables the database lacks."""
+    url = application.state.settings.database_url
+    seed(application.state.session_factory)
+    config = Config(str(BACKEND / "alembic.ini"))
+    with application.state.engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0009")
+    before = present_counts(url)
+    code, output = run(monkeypatch, capsys, "backup", "--out", str(tmp_path), url=url)
+    assert code == 0, output
+    (backup,) = tmp_path.glob("optima-pars-*.sqlite")
+    manifest = json.loads(backup.with_suffix(".manifest.json").read_text())
+    assert manifest["alembic_revision"] == "0009"
+    assert manifest["absent_tables"] == ["devotion_bookmarks", "devotion_events", "devotions", "prayer_texts"]
+    assert not {"devotions", "prayer_texts"} & set(manifest["tables"])
+    assert manifest["tables"]["books"]["rows"] == 1 and manifest["tables"]["users"]["rows"] == 2
+    assert present_counts(url) == before and list(tmp_path.glob("*.partial")) == []
+    code, output = run(monkeypatch, capsys, "verify", str(backup))
+    assert code == 0 and output.startswith("OK")
+    assert "behind the code" in run(monkeypatch, capsys, "backup", "--out", str(tmp_path / "again"), url=url)[1]
 
 
 @needs_postgres
