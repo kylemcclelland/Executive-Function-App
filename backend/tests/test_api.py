@@ -319,7 +319,7 @@ def test_commit_failure_never_returns_success(application, method, path, payload
 
 
 def test_production_refuses_to_start_without_clerk():
-    with pytest.raises(RuntimeError, match="Clerk"):
+    with pytest.raises(RuntimeError, match="CLERK_SECRET_KEY"):
         create_app(Settings(app_env="production", _env_file=None))
 
 
@@ -328,7 +328,7 @@ def test_missing_environment_defaults_to_fail_closed(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None)
     assert settings.app_env == "production"
-    with pytest.raises(RuntimeError, match="Clerk"):
+    with pytest.raises(RuntimeError, match="CLERK_SECRET_KEY"):
         create_app(settings)
 
 

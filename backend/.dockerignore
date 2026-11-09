@@ -1,0 +1,21 @@
+# Nothing here may enter the image: secrets, local databases (personal data), caches, tests.
+.env
+.env.*
+**/.env
+**/.env.*
+.venv
+data
+*.db
+*.sqlite
+*.sqlite3
+.cache
+.pytest_cache
+.ruff_cache
+__pycache__
+**/__pycache__
+*.pyc
+*.egg-info
+tests
+.git
+Dockerfile
+.dockerignore
