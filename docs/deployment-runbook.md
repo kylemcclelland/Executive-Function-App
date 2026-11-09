@@ -3,6 +3,19 @@
 Approved architecture: **Vercel** (frontend) + **Railway** (one FastAPI container) + **Neon** (PostgreSQL).
 Nothing below has been executed. Each numbered step in "Stage 1" needs your explicit go-ahead.
 
+## 0. Current status: Stage 1 private staging is live (2026-11-09)
+
+| Piece | Where | State |
+|---|---|---|
+| Frontend | Vercel project `optima-pars`; staging URL `https://optima-pars-git-copilot-build-mvp-0-1-kyle-f16c.vercel.app` (branch alias of `copilot/build-mvp-0-1`) | Deployment Protection is **on for all deployments, including the production alias** |
+| Backend | Railway project `optima-pars-staging`, service `api` (one replica), public API host `https://api-production-1a18.up.railway.app` | Image built from `backend/Dockerfile`; migrations 0001 to 0009 applied on first start |
+| Database | Neon project `optima-pars-staging` (id `summer-snow-16078087`, AWS us-east-1, PostgreSQL 18, Free plan, direct connection, `sslmode=require`) | **Empty**: no SQLite data has been migrated |
+| Auth | Clerk **development** instance; sign-ups restricted to one allowlisted email | A non-allowlisted sign-up is refused |
+
+Verified on staging with a temporary Clerk test user (since deleted): signed-out visitors are sent to `/sign-in` and the app makes no API calls; a Clerk-signed session reaches Today, Tasks, Inbox, Projects, Calendar, Library, Notes and Preferences with every API call returning 200; calls without a token return 401; a new account gets the timezone `America/New_York`. Browser-visible API paths all go through the Vercel `/api` rewrite.
+
+Known exposure: the Railway API host is public (Vercel cannot reach a private network). It serves only `/health` without a valid Clerk token issued for the staging origin, and it has no API docs. If you want it closed further, add an origin shared secret checked by the backend.
+
 ## 1. Can we start on the Vercel subdomain? (investigated)
 
 **Short answer: yes for a private staging deployment, no for a real production launch.**
