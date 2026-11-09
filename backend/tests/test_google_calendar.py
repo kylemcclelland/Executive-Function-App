@@ -595,3 +595,33 @@ def test_legacy_user_has_no_calendar_and_new_users_cannot_inherit_one(applicatio
         client = as_user(application, subject)
         assert client.get(f"{BASE}/status").json()["status"] == "not_connected"
         assert client.get(f"{BASE}/events").status_code == 409
+
+
+def test_redaction_keeps_uvicorns_access_log_working():
+    """The filter once emptied the record's args, so uvicorn's formatter failed on every line."""
+    import io
+
+    from uvicorn.logging import AccessFormatter
+
+    from app.core.redaction import install_log_redaction
+
+    install_log_redaction()
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    pattern = '%(client_addr)s - "%(request_line)s" %(status_code)s'
+    handler.setFormatter(AccessFormatter(pattern, use_colors=False))
+    logger = logging.getLogger("uvicorn.access")
+    level = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    try:
+        logger.info(
+            '%s - "%s %s HTTP/%s" %d', "10.0.0.1:5000", "GET",
+            f"{BASE}/callback?code=4/0SECRETCODE&state=s3cr3t&scope=x", "1.1", 303,
+        )
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(level)
+    line = stream.getvalue()
+    assert "Logging error" not in line and "303" in line
+    assert "SECRETCODE" not in line and "s3cr3t" not in line and "scope=x" in line

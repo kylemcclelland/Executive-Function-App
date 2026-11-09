@@ -14,14 +14,25 @@ def redact(text: str) -> str:
     return _SECRET_PARAM.sub(r"\1=REDACTED", text)
 
 
+def _redact_arg(value):
+    if isinstance(value, str):
+        return redact(value)
+    if type(value).__name__ == "URL":  # httpx logs its URL as an object
+        return redact(str(value))
+    return value
+
+
 class RedactOAuthParams(logging.Filter):
+    """Redacts in place and keeps ``record.args`` the same shape: uvicorn's access formatter unpacks
+    exactly five arguments, so replacing them with a pre-formatted message breaks every log line."""
+
     def filter(self, record: logging.LogRecord) -> bool:
-        # Format first: arguments are often objects (e.g. httpx.URL), not strings.
-        try:
-            message = record.getMessage()
-        except (TypeError, ValueError):
-            return True
-        record.msg, record.args = redact(message), ()
+        if isinstance(record.msg, str):
+            record.msg = redact(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(_redact_arg(arg) for arg in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {key: _redact_arg(arg) for key, arg in record.args.items()}
         return True
 
 
