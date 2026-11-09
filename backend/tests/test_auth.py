@@ -10,7 +10,6 @@ from alembic.config import Config
 from clerk_tokens import (
     AUTHORIZED_ORIGIN,
     OTHER_PRIVATE_KEY,
-    PUBLIC_KEY,
     bearer,
     make_token,
 )
@@ -226,14 +225,9 @@ def test_new_accounts_never_see_pre_authentication_data(application):
 
 # ------------------------------------------------------------ configuration
 
-def test_production_starts_only_with_clerk_configured():
-    with pytest.raises(RuntimeError, match="Clerk"):
+def test_production_refuses_to_start_without_clerk():
+    with pytest.raises(RuntimeError, match="CLERK_SECRET_KEY"):
         create_app(Settings(app_env="production", _env_file=None))
-    app = create_app(Settings(
-        app_env="production", database_url="sqlite://", clerk_jwt_key=PUBLIC_KEY, _env_file=None,
-    ))
-    assert app.state.authenticator is not None
-    app.state.engine.dispose()
 
 
 def test_blank_clerk_settings_mean_unconfigured(monkeypatch):

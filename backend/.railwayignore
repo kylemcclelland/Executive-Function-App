@@ -1,0 +1,14 @@
+# Keep personal data and secrets out of `railway up` uploads.
+.env
+.env.*
+!.env.production.example
+data
+*.db
+*.sqlite
+*.sqlite3
+.cache
+.venv
+tests
+__pycache__
+.pytest_cache
+.ruff_cache

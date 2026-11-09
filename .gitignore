@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.*.example
 .venv/
 __pycache__/
 *.py[cod]
@@ -14,3 +15,9 @@ dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
+.vercel
+# Database backups contain personal data: never commit them.
+backups/
+optima-pars-*.sqlite
+optima-pars-*.manifest.json
+*.sqlite.partial

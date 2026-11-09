@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { api, apiUpload, setTokenSource } from '../services/api'
 
@@ -57,6 +57,22 @@ describe('route protection', () => {
   it('renders the app for a signed-in user', () => {
     renderAt('/', <RequireAuth><p>private study</p></RequireAuth>)
     expect(screen.getByText('private study')).toBeInTheDocument()
+  })
+
+  it('does not discard the queries the app starts the moment Clerk finishes loading (they would stay on "Loading…")', async () => {
+    clerk.auth = { isLoaded: false, isSignedIn: false, userId: undefined }
+    const requests = vi.fn(async () => 'priorities loaded')
+    function Probe() {
+      const query = useQuery({ queryKey: ['probe'], queryFn: requests })
+      return <p>{query.isPending ? 'Loading…' : query.data}</p>
+    }
+    const tree = () => <QueryClientProvider client={queryClient}><MemoryRouter><RequireAuth><Probe /></RequireAuth></MemoryRouter></QueryClientProvider>
+    const { rerender } = render(tree())
+    clerk.auth = { isLoaded: true, isSignedIn: true, userId: 'user_a' }
+    rerender(tree())
+    rerender(tree())   // Clerk and the router re-render the page right after it mounts
+    expect(await screen.findByText('priorities loaded', {}, { timeout: 1500 })).toBeInTheDocument()
+    expect(requests).toHaveBeenCalledTimes(1)
   })
 
   it('discards cached data when the signed-in account changes', () => {

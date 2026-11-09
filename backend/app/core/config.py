@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 # Owner of all data created before Clerk authentication. No Clerk account is linked to it
 # until the owner explicitly claims it; see docs/clerk-data-migration-plan.md.
@@ -97,3 +98,46 @@ class Settings(BaseSettings):
     @property
     def authorized_parties(self) -> list[str]:
         return self.clerk_authorized_parties or self.cors_origins
+
+    def production_problems(self) -> list[str]:
+        """Everything that makes this configuration unsafe to serve real traffic with.
+
+        Checked at startup when APP_ENV=production, which then refuses to start. Each message names
+        the setting to fix, never a secret value.
+        """
+        problems: list[str] = []
+        try:
+            database = make_url(self.database_url)
+        except Exception:
+            return ["DATABASE_URL is not a valid database URL"]
+        if database.get_backend_name() != "postgresql":
+            problems.append("DATABASE_URL must be PostgreSQL (SQLite is for local development)")
+        else:
+            host = database.host or ""
+            private = host in {"localhost", "127.0.0.1"} or host.endswith(".railway.internal")
+            secure = database.query.get("sslmode") in {"require", "verify-ca", "verify-full"}
+            if not private and not secure:
+                problems.append("DATABASE_URL must include ?sslmode=require (database is remote)")
+        if not self.clerk_configured:
+            problems.append("CLERK_SECRET_KEY (or CLERK_JWT_KEY) is not set")
+        if not self.clerk_authorized_parties:
+            problems.append("CLERK_AUTHORIZED_PARTIES must list the production origin(s)")
+        origins = [*self.authorized_parties, *self.cors_origins, self.frontend_url]
+        google = (
+            self.google_client_id, self.google_client_secret, self.google_token_encryption_key,
+        )
+        if self.google_configured:
+            origins.append(self.google_redirect_uri)
+        elif any(google):
+            problems.append(
+                "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_TOKEN_ENCRYPTION_KEY "
+                "must be set together"
+            )
+        for origin in origins:
+            if "*" in origin:
+                problems.append(f"wildcard origins are not allowed ({origin})")
+            elif not origin.startswith("https://") or any(
+                local in origin for local in ("localhost", "127.0.0.1", "0.0.0.0")
+            ):
+                problems.append(f"production origins must be https and not local ({origin})")
+        return list(dict.fromkeys(problems))
