@@ -38,7 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from sqlalchemy import create_engine, event, select, text  # noqa: E402
+from sqlalchemy import create_engine, event, inspect, select, text  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 from sqlite_to_postgres import alembic_revision, table_digest  # noqa: E402
 
@@ -73,36 +73,45 @@ def database_url(arguments) -> str:
 
 
 def write_backup(url: str, destination: Path) -> dict:
-    """Snapshot PostgreSQL into ``destination`` (a new SQLite file) and return its manifest."""
+    """Snapshot PostgreSQL into ``destination`` (a new SQLite file) and return its manifest.
+
+    The database may be one migration behind the code (the normal state just before migrating, which
+    is exactly when a backup is wanted). Tables the code knows but the database lacks are not read;
+    they are listed in the manifest as ``absent_tables`` and the file holds them empty.
+    """
     tables = Base.metadata.sorted_tables
     source = create_engine(url, pool_pre_ping=True)
     target = sqlite_engine(destination)
+    try:
+        @event.listens_for(target, "connect")
+        def enforce_keys(connection, _):
+            connection.execute("PRAGMA foreign_keys=ON")
 
-    @event.listens_for(target, "connect")
-    def enforce_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(target)
-    manifest_tables: dict[str, dict] = {}
-    with source.connect().execution_options(isolation_level="REPEATABLE READ") as src:
-        src.execute(text("SET TRANSACTION READ ONLY"))  # a backup must never be able to write
-        revision = alembic_revision(src)
-        if revision is None:
-            raise SystemExit("The database has no alembic_version table: refusing to back up an unmigrated database.")
-        server = src.execute(text("SHOW server_version")).scalar()
-        with target.begin() as dst:
-            dst.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"))
-            dst.execute(text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision})
-            for table in tables:
-                result = src.execute(select(table))
-                while batch := result.fetchmany(BATCH):
-                    dst.execute(table.insert(), [dict(row._mapping) for row in batch])
-        # Digests of what PostgreSQL held in this same snapshot, to compare against the file.
-        for table in tables:
-            rows, digest = table_digest(src, table)
-            manifest_tables[table.name] = {"rows": rows, "sha256": digest}
-    source.dispose()
-    target.dispose()
+        Base.metadata.create_all(target)
+        manifest_tables: dict[str, dict] = {}
+        with source.connect().execution_options(isolation_level="REPEATABLE READ") as src:
+            src.execute(text("SET TRANSACTION READ ONLY"))  # a backup must never be able to write
+            revision = alembic_revision(src)
+            if revision is None:
+                raise SystemExit("The database has no alembic_version table: refusing to back up an unmigrated database.")
+            server = src.execute(text("SHOW server_version")).scalar()
+            present = set(inspect(src).get_table_names())
+            held = [table for table in tables if table.name in present]
+            absent = sorted(table.name for table in tables if table.name not in present)
+            with target.begin() as dst:
+                dst.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"))
+                dst.execute(text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision})
+                for table in held:
+                    result = src.execute(select(table))
+                    while batch := result.fetchmany(BATCH):
+                        dst.execute(table.insert(), [dict(row._mapping) for row in batch])
+            # Digests of what PostgreSQL held in this same snapshot, to compare against the file.
+            for table in held:
+                rows, digest = table_digest(src, table)
+                manifest_tables[table.name] = {"rows": rows, "sha256": digest}
+    finally:
+        source.dispose()
+        target.dispose()  # release the file even on failure, so a failed run can clean up after itself
     parsed = make_url(url)
     return {
         "format": 1,
@@ -110,6 +119,7 @@ def write_backup(url: str, destination: Path) -> dict:
         "source": {"host": parsed.host, "database": parsed.database, "server_version": server},
         "alembic_revision": revision,
         "tables": manifest_tables,
+        "absent_tables": absent,
     }
 
 
@@ -131,8 +141,14 @@ def verify_backup(path: Path, manifest: dict) -> list[str]:
                 problems.append("foreign key violations found")
             if alembic_revision(connection) != manifest["alembic_revision"]:
                 problems.append("Alembic revision differs from the manifest")
+            absent = set(manifest.get("absent_tables", []))
             for table in Base.metadata.sorted_tables:
                 want = manifest["tables"].get(table.name)
+                if want is None and table.name in absent:
+                    # The database had no such table (it was a migration behind): the file must hold it empty.
+                    if table_digest(connection, table)[0]:
+                        problems.append(f"{table.name}: expected to be absent from the source but the file holds rows")
+                    continue
                 if want is None:
                     problems.append(f"{table.name}: missing from the manifest")
                     continue
@@ -191,6 +207,8 @@ def command_backup(arguments) -> int:
     for table, info in manifest["tables"].items():
         if info["rows"]:
             print(f"    {table:<30}{info['rows']:>7}")
+    if manifest["absent_tables"]:
+        print(f"  not in this database (it is behind the code; held empty in the file): {', '.join(manifest['absent_tables'])}")
     print(f"  SHA-256 {manifest['file']['sha256']}")
     if arguments.keep:
         for old in prune(directory, arguments.keep, final):
