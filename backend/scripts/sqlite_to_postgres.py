@@ -95,6 +95,12 @@ def main() -> int:
     parser.add_argument(
         "--keep-clerk-users", action="store_true", help="also copy users linked to a Clerk account"
     )
+    parser.add_argument(
+        "--allow-empty-accounts",
+        action="store_true",
+        help="allow the target to already hold Clerk account rows (made by signing in) that own "
+        "nothing; they are left untouched. Every other table must still be empty.",
+    )
     args = parser.parse_args()
 
     source_path = Path(args.source).resolve()
@@ -127,9 +133,32 @@ def main() -> int:
             for t in tables
             if (n := dst.execute(select(text("count(*)")).select_from(t)).scalar())
         }
+        preexisting: list[UUID] = []  # empty account rows already in the target, left untouched
+        if occupied and args.allow_empty_accounts:
+            accounts = list(dst.execute(select(User)))
+            if occupied.get("users") == len(accounts) and all(a.clerk_user_id for a in accounts):
+                preexisting = [a.id for a in accounts]
+                owned_by_accounts = {
+                    t.name: n
+                    for t in tables
+                    if "user_id" in t.c
+                    and (
+                        n := dst.execute(
+                            select(text("count(*)")).select_from(t).where(t.c.user_id.in_(preexisting))
+                        ).scalar()
+                    )
+                }
+                others = {k: v for k, v in occupied.items() if k != "users"}
+                if not others and not owned_by_accounts:
+                    occupied = {}
+                    print(
+                        f"Target holds {len(preexisting)} Clerk account row(s) that own nothing; "
+                        "they will be left untouched."
+                    )
         if occupied:
             print(
-                f"STOP: the target is not empty: {occupied}. This script only fills an empty database."
+                f"STOP: the target is not empty: {occupied}. This script only fills an empty database"
+                " (or one holding only empty Clerk account rows, with --allow-empty-accounts)."
             )
             return 1
 
@@ -183,6 +212,16 @@ def main() -> int:
                 statement,
                 src.execute(select(text("count(*)")).select_from(statement.subquery())).scalar(),
             )
+        clash = {
+            row.clerk_user_id
+            for row in src.execute(select(User).where(User.clerk_user_id.is_not(None)))
+            if (row.id not in skipped_users)
+        } & {
+            a.clerk_user_id for a in dst.execute(select(User).where(User.id.in_(preexisting)))
+        }
+        if clash:
+            print(f"STOP: the source would copy a Clerk account the target already has: {clash}")
+            return 1
         scoped_filters = {name: scoped(plan[name][0]) for name in plan}
         width = max(len(name) for name in plan)
         for name, (_, _, count) in plan.items():
@@ -206,7 +245,10 @@ def main() -> int:
         for name, (table, statement, expected) in plan.items():
             where = scoped_filters[name]
             source_count, source_digest = table_digest(src, table, where)
-            target_count, target_digest = table_digest(dst, table)
+            target_where = (
+                User.id.not_in(preexisting) if preexisting and table is User.__table__ else None
+            )
+            target_count, target_digest = table_digest(dst, table, target_where)
             ok = source_count == target_count == expected and source_digest == target_digest
             failures += not ok
             print(
@@ -218,6 +260,8 @@ def main() -> int:
         )
         return 1
     print("\nEvery table matches the source exactly.")
+    if preexisting:
+        print(f"{len(preexisting)} existing empty account row(s) in the target were left untouched.")
     return 0
 
 
