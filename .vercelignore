@@ -1,0 +1,15 @@
+# Only the frontend is deployed to Vercel. Keep everything else (backend code, SQLite data,
+# secrets, local tooling) out of CLI uploads.
+.git
+.venv
+backend
+docs
+clerk-react
+docker-compose.yml
+.env
+.env.*
+**/.env
+**/.env.*
+*.db
+**/node_modules
+frontend/dist
