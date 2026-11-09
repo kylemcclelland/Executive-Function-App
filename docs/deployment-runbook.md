@@ -22,6 +22,12 @@ token is sent), so Today's Priorities, Tasks, Projects, Notes and Library all fa
 `frontend/vercel.json`) into `main` fixes that alias with no other change; Deployment Protection stays on either way.
 Also: Clerk's own sign-in screens still say "Studium" because that is the application name in the Clerk dashboard; rename it there.
 
+**Every browser origin that serves the app must be listed in Railway's `CLERK_AUTHORIZED_PARTIES`** (comma-separated). A Clerk session token
+carries the origin it was issued for (`azp`); the backend rejects a valid, unexpired token from any other origin with `401 Authentication required`,
+and logs `Rejected session token: token-invalid-authorized-parties (token origin '...' is not in CLERK_AUTHORIZED_PARTIES)` (Railway logs).
+Currently listed: `https://optima-pars.vercel.app` and the branch alias `https://optima-pars-git-copilot-build-mvp-0-1-kyle-f16c.vercel.app`.
+Per-deployment URLs (`optima-pars-<hash>-kyle-f16c.vercel.app`) are deliberately not listed, so a session there gets 401. Add a custom domain here too when you have one.
+
 Known exposure: the Railway API host is public (Vercel cannot reach a private network). It serves only `/health` without a valid Clerk token issued for the staging origin, and it has no API docs. If you want it closed further, add an origin shared secret checked by the backend.
 
 ## 1. Can we start on the Vercel subdomain? (investigated)
