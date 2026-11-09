@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F7F3EA" />
+    <meta name="description" content="Optima Pars. Unum est necessarium: one thing is necessary." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Optima Pars — Unum est necessarium</title>
+    <!-- Applies the saved (or system) theme before first paint so there is no flash of the wrong
+         theme. Keep in step with src/theme/theme.ts (src/test/theme.test.tsx runs this script). -->
+    <script>
+      (function () {
+        try {
+          var preference = localStorage.getItem('optima-pars-theme')
+          if (preference !== 'light' && preference !== 'dark') preference = 'system'
+          var dark = preference === 'dark' || (preference === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var root = document.documentElement
+          root.setAttribute('data-theme', dark ? 'dark' : 'light')
+          root.style.colorScheme = dark ? 'dark' : 'light'
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', dark ? '#111B17' : '#F7F3EA')
+        } catch (error) { /* storage unavailable: the default light theme applies */ }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
