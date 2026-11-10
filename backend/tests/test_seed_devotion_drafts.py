@@ -166,6 +166,11 @@ def test_every_text_with_wording_names_its_source_and_has_cleared_rights(applica
             assert has_body(row) and row.language == "la" and row.license_status == "unverified" and row.source_url is None and row.source_date is None
             assert "latin_prayers_file.txt" in row.license_notes and "SHA-256" in row.license_notes
             continue
+        if row.source_title == "User-supplied text":
+            # typed by the owner in a message that names no source and no rights: recorded as exactly that, never as cleared
+            assert has_body(row) and row.license_status == "unverified" and row.source_url is None and row.source_date is None
+            assert "message names no author" in row.license_notes and "SHA-256" in row.license_notes
+            continue
         if row.source_title.startswith("User-supplied document: The Prayers of the Rosary"):
             # supplied in a document that names no author, edition or rights: recorded as exactly that, never as cleared
             assert has_body(row) and row.slot.startswith("collection-") and row.license_status == "unverified" and row.source_url is None and row.source_date is None
@@ -300,6 +305,25 @@ def test_it_refuses_a_sqlite_database_that_holds_user_data(application, run):
     before = counts(application)
     code, output = run("--execute")
     assert code == 1 and "holds user data" in output and counts(application) == before
+
+
+def test_a_local_sqlite_database_with_user_data_is_seeded_only_when_explicitly_allowed_and_the_user_data_is_untouched(application, run):
+    if application.state.engine.dialect.name != "sqlite":
+        pytest.skip("SQLite-only guard")
+    with application.state.engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, timezone, created_at, updated_at) VALUES ('00000000000000000000000000000001', 'UTC', '2026-01-01', '2026-01-01')"))
+    def users():
+        with application.state.engine.connect() as connection:
+            return sorted(map(tuple, connection.execute(text("SELECT * FROM users")).all()))
+    before = users()
+    code, output = run("--execute", "--allow-sqlite-with-user-data")
+    assert code == 0 and "Created 11 unpublished draft devotion(s)" in output
+    assert users() == before                                                         # the user's own rows are exactly as they were
+    with application.state.session_factory() as db:
+        assert {d.status for d in db.scalars(select(Devotion))} == {"proposed"}      # nothing approved or published
+        assert all(t.approved_by is None and t.source_verified_by is None for t in db.scalars(select(PrayerText)))
+    code, output = run("--execute", "--allow-sqlite-with-user-data")                 # idempotent
+    assert code == 0 and "Created 0 unpublished draft devotion(s)" in output and "Created 0 proposed text record(s)" in output
 
 
 def test_the_database_url_is_never_taken_from_the_command_line(monkeypatch, capsys):

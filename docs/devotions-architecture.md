@@ -219,6 +219,14 @@ as **"User-supplied document"**, rights **unverified**, and sit in the normal re
   optional **Side by side** layout (Latin and English columns, stacked on a narrow screen). A language a prayer lacks is stated, never replaced.
   Only approved wording reaches the page, so it is absent until a reviewer approves each text.
 
+## Wording typed by the owner
+
+`backend/scripts/seed_data/owner_supplied_texts.json` holds wording the owner typed in a message (currently the English Act of Contrition),
+stored exactly as given, with source "User-supplied text", rights `unverified`, status `proposed`. Where it says it replaces an earlier cited
+edition, seeding creates only the owner's text for that slot, and the earlier record stays in `prayer_sources.json`. For a database seeded before,
+`seed_devotion_drafts.py --apply-owner-supplied` replaces a text only if it is still exactly the earlier edition (through the normal edit path:
+approvals are discarded and only field names are logged); a text edited since is never touched. Tests: `backend/tests/test_owner_supplied_text.py`.
+
 ## Tests
 
 * `backend/tests/test_devotions.py`: authorization, workflow, source requirements, per-language approval,

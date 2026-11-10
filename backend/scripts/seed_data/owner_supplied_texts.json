@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "provenance": "User-supplied text",
+  "supplied_via": "A chat message from the project owner",
+  "supplied_on": "2026-11-10",
+  "texts": [
+    {
+      "devotion_slug": "act-of-contrition",
+      "slot": "main",
+      "language": "en",
+      "supersedes_earlier_record": true,
+      "body": "O my God, I am heartily sorry for having offended Thee, and I detest all my sins because of Thy just punishments, but most of all because they offend Thee, my God, Who art all-good and deserving of all my love. I firmly resolve, with the help of Thy grace, to sin no more and to avoid the near occasions of sin."
+    }
+  ]
+}

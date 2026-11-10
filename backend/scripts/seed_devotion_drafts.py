@@ -16,8 +16,8 @@ What it guarantees
   * It writes no prayer wording of its own. Wording comes only from seed_data/prayer_sources.json, where each text
     was copied programmatically from a cited source whose reproduction rights were checked. Where rights are not
     cleared the text is held as a citation with no wording.
-  * It refuses a database that is not at the current migration, and a SQLite database that holds user data (the
-    legacy local database is never touched). One transaction: all or nothing.
+  * It refuses a database that is not at the current migration, and a SQLite database that holds user data unless
+    ``--allow-sqlite-with-user-data`` is passed deliberately (it only adds devotion rows). One transaction: all or nothing.
 """
 
 import argparse
@@ -46,6 +46,7 @@ ENTERED_BY = "seed:prayer-sources-v1"
 SOURCES = HERE / "seed_data" / "prayer_sources.json"
 USER_LATIN = HERE / "seed_data" / "user_supplied_latin.json"
 ROSARY_DOCUMENT = HERE / "seed_data" / "rosary_document.json"
+OWNER_TEXTS = HERE / "seed_data" / "owner_supplied_texts.json"
 
 
 class Refused(Exception):
@@ -118,6 +119,74 @@ def user_supplied_texts() -> list[dict]:
     return out
 
 
+def earlier_wording(key: tuple) -> dict | None:
+    """The cited source record already in prayer_sources.json for (devotion, slot, language), if any."""
+    return next((t for t in json.loads(SOURCES.read_text(encoding="utf-8"))["texts"] if (t["devotion_slug"], t["slot"], t["language"]) == key), None)
+
+
+def owner_supplied_texts() -> list[dict]:
+    """Wording the owner typed in a message, stored exactly as given.
+
+    The text comes only from seed_data/owner_supplied_texts.json. Where the owner says it replaces an earlier cited record, the
+    earlier record is kept in prayer_sources.json (it is not deleted) and its wording hash is noted. Rights are unverified: a
+    message names no source, so the text can sit in review but cannot be verified or approved until a source and rights are recorded.
+    """
+    if not OWNER_TEXTS.exists():
+        return []
+    data = json.loads(OWNER_TEXTS.read_text(encoding="utf-8"))
+    out = []
+    for item in data["texts"]:
+        key = (item["devotion_slug"], item["slot"], item["language"])
+        digest = hashlib.sha256(item["body"].encode("utf-8")).hexdigest()
+        notes = [f"{data['provenance']}: {data['supplied_via']} on {data['supplied_on']}. The message names no author, translator, edition or rights information, "
+                 "so none is recorded, and reproduction rights are not yet established. The wording is stored exactly as supplied."]
+        old = earlier_wording(key) if item.get("supersedes_earlier_record") else None
+        if old and old["body"]:
+            notes.append(f"Replaces the earlier cited edition ({old['source_title']}, {old['source_date']}), whose different wording had SHA-256 "
+                         f"{hashlib.sha256(old['body'].encode('utf-8')).hexdigest()}. That record is still in seed_data/prayer_sources.json.")
+        notes.append(f"Stored wording SHA-256 {digest}.")
+        out.append({
+            "devotion_slug": item["devotion_slug"], "slot": item["slot"], "language": item["language"], "body": item["body"],
+            "is_translation": False, "translator": None, "source_title": data["provenance"],
+            "source_authority": "Supplied by the project owner; no author or issuing authority was named",
+            "source_edition": f"{data['supplied_via']}, {data['supplied_on']}", "source_date": None, "source_url": None,
+            "attribution": f"{data['provenance']} ({data['supplied_via'].lower()}, {data['supplied_on']}). No author, edition or publisher was named.",
+            "license_status": "unverified", "license_notes": "\n\n".join(notes), "source_retrieved_at": None,
+            "_replaces": bool(old and old["body"]),
+        })
+    return out
+
+
+def apply_owner_supplied(db) -> dict:
+    """Bring a text already in a database to the owner-supplied wording, safely.
+
+    Only a text whose wording is still EXACTLY the earlier cited edition is replaced. It goes through the same edit path as any other
+    edit, so every earlier verification and approval is discarded and the text returns to "proposed", and a log entry names the fields
+    changed, never the wording. A text already holding the supplied wording is left alone; a text edited since is not touched at all.
+    """
+    from app.services.devotions import TEXT_CONTENT, apply_edit, text_fingerprint
+    report = {"changed": [], "already": [], "skipped": []}
+    for entry in owner_supplied_texts():
+        slug = entry["devotion_slug"]
+        devotion = db.scalar(select(Devotion).where(Devotion.slug == slug))
+        row = next((t for t in devotion.texts if (t.slot, t.language) == (entry["slot"], entry["language"])), None) if devotion else None
+        old = earlier_wording((slug, entry["slot"], entry["language"]))
+        if row is None:
+            report["skipped"].append((slug, "no text record yet (seeding creates it)"))
+        elif row.body == entry["body"]:
+            report["already"].append(slug)
+        elif entry["_replaces"] and old and row.body == old["body"]:
+            before = row.status
+            values = {k: v for k, v in entry.items() if k in TEXT_CONTENT and k not in ("slot", "language")}
+            changed = apply_edit(row, values, TEXT_CONTENT, text_fingerprint)
+            record(db, devotion.id, OWNER_SUPPLIER, "text_updated", text_id=row.id, from_status=before, to_status=row.status, note=f"owner-supplied wording: {', '.join(changed)}")
+            report["changed"].append((slug, before, row.status))
+        else:
+            report["skipped"].append((slug, "wording differs from the earlier edition (edited since); not touched"))
+    return report
+
+
+OWNER_SUPPLIER = "seed:owner-supplied-text"
 COLLECTION_DEVOTION = "the-holy-rosary"
 COLLECTION_PREFIX = "collection-"
 
@@ -212,6 +281,9 @@ def merge_user_supplied(data: list[dict]) -> list[dict]:
 def load_texts(drafts: list[dict]) -> list[dict]:
     data = json.loads(SOURCES.read_text(encoding="utf-8"))["texts"]
     data = merge_user_supplied(data) + rosary_document_texts()
+    supplied = owner_supplied_texts()
+    replaced = {(t["devotion_slug"], t["slot"], t["language"]) for t in supplied if t["_replaces"]}
+    data = [t for t in data if (t["devotion_slug"], t["slot"], t["language"]) not in replaced] + [{k: v for k, v in t.items() if k != "_replaces"} for t in supplied]
     known = {item["slug"] for item in drafts}
     every = {d["slug"] for d in devotion_drafts.DRAFTS}
     checked = []
@@ -226,15 +298,16 @@ def load_texts(drafts: list[dict]) -> list[dict]:
     return checked
 
 
-def check_target(engine) -> None:
+def check_target(engine, *, allow_user_data: bool = False) -> None:
     with engine.connect() as connection:
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
         if revision is None or revision < MIN_REVISION:
             raise Refused(f"The database is at migration {revision}, not {MIN_REVISION}: run the migrations first.")
-        if engine.dialect.name == "sqlite":
+        if engine.dialect.name == "sqlite" and not allow_user_data:
             users = connection.execute(text("SELECT count(*) FROM users")).scalar()
             if users:
-                raise Refused("This SQLite database holds user data. It is never modified by this tool; use a scratch database.")
+                raise Refused("This SQLite database holds user data. By default it is never modified by this tool; use a scratch database, "
+                              "or pass --allow-sqlite-with-user-data for your own local development database (take a backup first). The tool only adds devotion rows and never touches the user's data.")
 
 
 def plan_and_apply(db, drafts: list[dict], texts: list[dict], *, add_missing_texts: bool) -> dict:
@@ -278,6 +351,8 @@ def main(argv=None) -> int:
     parser.add_argument("--add-missing-texts", action="store_true", help="also add source texts missing from devotions that already exist")
     parser.add_argument("--url-env", default="DATABASE_URL", help="environment variable holding the database URL")
     parser.add_argument("--normalize-latin", action="store_true", help="bring already-seeded Latin texts that are still the original verbatim import to the authorized normalized wording (discards their verification and approval)")
+    parser.add_argument("--allow-sqlite-with-user-data", action="store_true", help="permit a local SQLite database that holds user data (devotion rows are only added; nothing else is read or changed). Back it up first")
+    parser.add_argument("--apply-owner-supplied", action="store_true", help="replace already-seeded texts that are still the earlier cited edition with the owner-supplied wording (discards their verification and approval)")
     parser.add_argument("--codes", help="only these drafts, comma-separated (for example DEV-001,DEV-002); the default is all ten")
     arguments = parser.parse_args(argv)
     url = os.environ.get(arguments.url_env, "")
@@ -292,12 +367,13 @@ def main(argv=None) -> int:
         engine = make_engine(url)
         parsed = make_url(url)
         print(f"Target: {parsed.get_backend_name()}://{parsed.host or ''}{parsed.database and '/' + parsed.database or ''}")
-        check_target(engine)
+        check_target(engine, allow_user_data=arguments.allow_sqlite_with_user_data)
         with make_session_factory(engine)() as db:
             transaction = db.begin()
             try:
                 report = plan_and_apply(db, drafts, texts, add_missing_texts=arguments.add_missing_texts)
                 normalized = apply_latin_normalization(db) if arguments.normalize_latin else None
+                owner = apply_owner_supplied(db) if arguments.apply_owner_supplied else None
             except BaseException:
                 transaction.rollback()
                 raise
@@ -315,6 +391,12 @@ def main(argv=None) -> int:
     if normalized is not None:
         print(f"Latin normalization: {len(normalized['changed'])} {'changed' if arguments.execute else 'would change'} (returned to proposed), {len(normalized['already'])} already normalized, {len(normalized['skipped'])} skipped")
         for slug, why in normalized["skipped"]:
+            print(f"  skipped {slug}: {why}")
+    if owner is not None:
+        print(f"Owner-supplied wording: {len(owner['changed'])} {'replaced' if arguments.execute else 'would be replaced'} (returned to proposed), {len(owner['already'])} already current, {len(owner['skipped'])} skipped")
+        for slug, before, after in owner["changed"]:
+            print(f"  {slug}: {before} -> {after}")
+        for slug, why in owner["skipped"]:
             print(f"  skipped {slug}: {why}")
     with_wording = sum(1 for t in report["texts_created"] if t[3])
     print(f"{verb} {len(report['texts_created'])} proposed text record(s): {with_wording} with sourced wording, {len(report['texts_created']) - with_wording} citation-only (wording withheld)")

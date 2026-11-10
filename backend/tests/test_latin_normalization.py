@@ -122,8 +122,8 @@ def test_english_texts_and_the_unsupplied_latin_are_unchanged_and_the_latin_is_r
         slugs = {d.id: d.slug for d in db.scalars(select(Devotion))}
         for row in db.scalars(select(PrayerText)):
             key = (slugs[row.devotion_id], row.slot, row.language)
-            if row.slot.startswith("collection-"):
-                continue                                                                  # the Rosary document's texts have their own tests
+            if row.slot.startswith("collection-") or row.source_title == "User-supplied text":
+                continue                                                                  # the Rosary document and the owner-typed text have their own tests
             if row.language == "en":
                 assert row.body == sources[key], key                                      # English untouched
             elif key[0] == "sign-of-the-cross":
