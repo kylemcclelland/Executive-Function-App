@@ -23,16 +23,19 @@ const library = (): DevotionBrief[] => [
 
 let requests: { path: string; method: string }[]
 let respond: () => Response | Promise<Response>
+let access = { is_editor: false, is_approver: false }
 let queryClient: QueryClient
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
 function stub(list: DevotionBrief[] | (() => Response | Promise<Response>)) {
   requests = []
+  access = { is_editor: false, is_approver: false }
   respond = typeof list === 'function' ? list : () => json(list)
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } })
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: RequestInit) => {
     const path = input.replace('/api', '')
     requests.push({ path, method: options?.method ?? 'GET' })
+    if (path === '/editorial-access') return json(access)
     if (path === '/devotions') return respond()
     const slug = path.replace('/devotions/', '')
     return json({ ...brief(slug, `Filler ${slug}`), overview: 'Overview filler', background: null, significance: null, references: [], instructions: [], steps: [], texts: [] })
@@ -413,6 +416,31 @@ describe('waiting for the list', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'The Oratory' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Loading')
     expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
-    await waitFor(() => expect(requests).toHaveLength(1))
+    await waitFor(() => expect(requests.filter(request => request.path === '/devotions')).toHaveLength(1))
+  })
+})
+
+describe('the editors-only entrance', () => {
+  it('shows no editorial link to an ordinary reader', async () => {
+    stub(library())
+    open()
+    await screen.findByRole('region', { name: 'All devotions' })
+    expect(screen.queryByRole('link', { name: 'Editorial review' })).not.toBeInTheDocument()
+  })
+
+  it.each([['an editor', { is_editor: true, is_approver: false }], ['an approver', { is_editor: false, is_approver: true }]])('shows %s a quiet link to the review queue', async (_who, roles) => {
+    stub(library())
+    access = roles
+    open()
+    expect(await screen.findByRole('link', { name: 'Editorial review' })).toHaveAttribute('href', '/editorial/devotions')
+  })
+
+  it('does not let a failed roles request look like an editorial link or break the library', async () => {
+    stub(library())
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => input.includes('/editorial-access') ? json({ detail: 'down' }, 503) : json(library())))
+    open()
+    await screen.findByRole('region', { name: 'All devotions' })
+    expect(screen.queryByRole('link', { name: 'Editorial review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

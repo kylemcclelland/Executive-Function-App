@@ -17,6 +17,9 @@ import { CalendarPage } from './pages/CalendarPage'
 import { DevotionLibraryPage } from './pages/DevotionLibraryPage'
 import { DevotionPage } from './pages/DevotionPage'
 import { DevotionPreviewPage } from './pages/DevotionPreviewPage'
+import { EditorialQueuePage } from './pages/EditorialQueuePage'
+import { EditorialReviewPage } from './pages/EditorialReviewPage'
+import { EditorialPreviewPage } from './pages/EditorialPreviewPage'
 import { SignInPage, SignUpPage } from './auth/AuthPages'
 import { RequireAuth } from './auth/RequireAuth'
 import { AccountControls } from './auth/AccountControls'
@@ -40,6 +43,9 @@ export function AppRoutes({ profile }: { profile?: ReactNode }) {
       <Route path="/devotions" element={<DevotionLibraryPage />} />
       <Route path="/devotions/preview/:kind?" element={<DevotionPreviewPage />} />
       <Route path="/devotions/:slug" element={<DevotionPage />} />
+      <Route path="/editorial/devotions" element={<EditorialQueuePage />} />
+      <Route path="/editorial/devotions/:id" element={<EditorialReviewPage />} />
+      <Route path="/editorial/devotions/:id/preview" element={<EditorialPreviewPage />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="*" element={<FuturePage name="Page not found" icon={Feather} description="That page doesn’t exist. Head back to Today." />} />
     </Routes>

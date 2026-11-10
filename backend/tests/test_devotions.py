@@ -2,6 +2,7 @@
 """Devotions: publication workflow, authorization, and the promise that unapproved wording never
 reaches a reader. Every prayer text below is neutral test filler, never real devotional content."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -280,7 +281,9 @@ def test_readers_never_receive_internal_editorial_fields(editor, approver, reade
 @pytest.mark.parametrize("stop_at", [None, "source_verified", "pending_approval"])
 def test_wording_that_is_not_approved_is_never_shown(editor, approver, reader, stop_at):
     devotion = make_devotion(editor)
-    text_row = make_text(editor, devotion)
+    approved = make_text(editor, devotion, language="la", body="Approved filler wording")
+    approve_text(editor, approver, devotion, approved)    # something must be approved to publish at all
+    text_row = make_text(editor, devotion)                # English, carrying MARKER, stops short
     url = f"{BASE}/{devotion['id']}/texts/{text_row['id']}/transition"
     steps = {None: [], "source_verified": ["source_verified"],
              "pending_approval": ["source_verified", "pending_approval"]}[stop_at]
@@ -288,9 +291,10 @@ def test_wording_that_is_not_approved_is_never_shown(editor, approver, reader, s
         move(editor, url, step)
     publish(editor, approver, devotion)        # the devotion itself is approved and published
     page = reader.get("/api/devotions/test-devotion")
-    assert page.status_code == 200 and page.json()["texts"] == []
+    assert page.status_code == 200
+    assert [t["language"] for t in page.json()["texts"]] == ["la"]
     assert MARKER not in page.text and MARKER not in reader.get("/api/devotions").text
-    assert reader.get("/api/devotions").json()[0]["has_text"] is False
+    assert reader.get("/api/devotions").json()[0]["has_text"] is True
 
 
 def test_each_language_is_approved_separately(editor, approver, reader):
@@ -447,10 +451,18 @@ def test_blank_wording_is_refused_by_the_api_and_the_database(application, edito
     refused = editor.post(
         f"{BASE}/{devotion['id']}/texts", json={"slot": "a", "language": "en", "body": "  \n "},
     )
-    assert refused.status_code == 422
+    assert refused.status_code == 422                     # spaces are not wording
     with application.state.session_factory() as db:
-        db.add(PrayerText(
-            devotion_id=UUID(devotion["id"]), slot="a", language="en", body=" ", entered_by="u",
+        db.add(PrayerText(                                 # a proposal may hold no wording...
+            devotion_id=UUID(devotion["id"]), slot="a", language="en", body="", entered_by="u",
+        ))
+        db.flush()
+        db.rollback()
+        db.add(PrayerText(                                 # ...but nothing past it may
+            devotion_id=UUID(devotion["id"]), slot="b", language="en", body=" ", entered_by="u",
+            status="source_verified", source_title="s", attribution="a",
+            license_status="public_domain", source_verified_by="u",
+            source_verified_at=datetime.now(UTC),
         ))
         with pytest.raises(IntegrityError):
             db.flush()
@@ -512,13 +524,17 @@ def test_a_complex_sequence_round_trips_through_the_reader_api(editor, approver,
     texts = [make_text(editor, devotion, slot=s, body=f"{s} filler") for s in ("opening", "refrain")]
     for row in texts:
         approve_text(editor, approver, devotion, row)
-    make_text(editor, devotion, slot="closing", body="closing filler")      # never approved
+    closing = make_text(editor, devotion, slot="closing", body="closing filler")
+    approve_text(editor, approver, devotion, closing)
+    make_text(editor, devotion, slot="closing", language="la", body="closing latin filler")  # never approved
     publish(editor, approver, devotion)
     detail = reader.get("/api/devotions/test-devotion").json()
     assert [s["kind"] for s in detail["steps"]] == ["instruction", "prayer", "prayer", "response"]
     assert detail["steps"][2]["repeat"] == 10 and detail["steps"][0]["section"] == "Opening"
     assert detail["instructions"] == ["First instruction", "Second instruction"]
-    assert {t["slot"] for t in detail["texts"]} == {"opening", "refrain"}    # not "closing"
+    assert {(t["slot"], t["language"]) for t in detail["texts"]} == {
+        ("opening", "en"), ("refrain", "en"), ("closing", "en"),
+    }                                                                       # not closing/la
     assert detail["references"] == [{"label": "Filler reference", "url": "https://example.org"}]
     assert (detail["category"], detail["estimated_minutes"]) == ("Filler", 20)
 

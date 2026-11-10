@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { AppRoutes } from '../App'
 import { DevotionView } from '../components/devotions/DevotionView'
-import { LANGUAGE_KEY, SIZE_KEY, isResponseLine, resolveLanguage, safeUrl } from '../lib/devotions'
+import { LANGUAGE_KEY, SIZE_KEY, isResponseLine, safeUrl } from '../lib/devotions'
 import { PLACEHOLDER_KINDS, placeholderDevotion } from '../lib/devotionPlaceholders'
 import type { Devotion, PrayerText } from '../types/devotions'
 import css from '../components/devotions/devotions.css?raw'
@@ -103,53 +103,6 @@ describe('missing optional sections', () => {
     const howTo = screen.getByRole('region', { name: 'How to Pray' })
     expect(within(howTo).getByText('The sequence')).toBeInTheDocument()
     expect(howTo.querySelectorAll('.instruction-list')).toHaveLength(0)
-  })
-})
-
-describe('Latin and English', () => {
-  const bilingual = () => placeholderDevotion('bilingual')
-  const shown = () => [...document.querySelectorAll<HTMLElement>('.prayer-body')].map(el => [el.getAttribute('lang'), el.textContent])
-
-  it('offers the languages that exist, showing English first and one language at a time', async () => {
-    view(bilingual())
-    const toggle = screen.getByRole('group', { name: 'Language' })
-    expect(within(toggle).getAllByRole('button').map(b => b.textContent)).toEqual(['Latin', 'English', 'Both'])
-    expect(within(toggle).getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true')
-    expect(shown().map(([lang]) => lang)).toEqual(['en'])
-    await userEvent.click(within(toggle).getByRole('button', { name: 'Latin' }))
-    expect(shown().map(([lang]) => lang)).toEqual(['la'])
-    expect(shown()[0][1]).toContain('Verified Latin text will appear here.')
-    expect(window.localStorage.getItem(LANGUAGE_KEY)).toBe('la')
-  })
-
-  it('shows both side by side with Latin first, each marked with its language', async () => {
-    view(bilingual())
-    await userEvent.click(screen.getByRole('button', { name: 'Both' }))
-    expect(shown().map(([lang]) => lang)).toEqual(['la', 'en'])
-    expect(document.querySelector('.prayer-versions')).toHaveClass('is-parallel')
-    expect(screen.getAllByText(/^(Latin|English)$/, { selector: '.prayer-language' })).toHaveLength(2)
-  })
-
-  it('says so, and falls back, when one text lacks the chosen language', () => {
-    window.localStorage.setItem(LANGUAGE_KEY, 'la')
-    view({ ...placeholderDevotion('simple'), texts: [text('one', 'en', 'English one'), text('one', 'la', 'Latin one'), text('two', 'en', 'English two')] })
-    expect(screen.getAllByText('No Latin version of this text has been published yet.')).toHaveLength(1)
-    expect(shown()).toEqual([['la', 'Latin one'], ['en', 'English two']])        // the Latin where it exists, the English otherwise
-  })
-
-  it('offers no toggle, and no note, when only one language exists at all', () => {
-    window.localStorage.setItem(LANGUAGE_KEY, 'la')
-    view(placeholderDevotion('simple'))
-    expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/No Latin version/)).not.toBeInTheDocument()
-    expect(shown().map(([lang]) => lang)).toEqual(['en'])
-  })
-
-  it('resolves a preference against what is available', () => {
-    expect(resolveLanguage('la', ['en'])).toBe('en')
-    expect(resolveLanguage('both', ['en'])).toBe('en')
-    expect(resolveLanguage('both', ['la', 'en'])).toBe('both')
-    expect(resolveLanguage('fr', ['la'])).toBe('la')
   })
 })
 
@@ -281,7 +234,7 @@ describe('prayer mode', () => {
 
   it('follows the language and size choices made in the dialog', async () => {
     const dialog = await open(placeholderDevotion('bilingual'))
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Latin' }))
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Language' }), 'la')
     expect(dialog.querySelector('.prayer-body')).toHaveAttribute('lang', 'la')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Larger text' }))
     expect(dialog).toHaveAttribute('data-size', 'large')

@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Bookmark, Cross, Search, X } from 'lucide-react'
+import { Bookmark, Cross, PenLine, Search, X } from 'lucide-react'
 import { Button, Input } from '../components/ui'
 import { Empty, ErrorMessage, Loading } from '../components/common'
 import { DevotionCard } from '../components/devotions/DevotionCard'
 import { api } from '../services/api'
+import { useEditorialAccess } from '../lib/editorial'
 import { LIBRARY_CATEGORIES, categoryKeyOf, categoryLabel, describeLibraryError, isCategoryKey, matchesSearch, type CategoryKey } from '../lib/devotions'
 import type { DevotionBrief } from '../types/devotions'
 import '../components/devotions/oratory.css'
@@ -19,6 +20,8 @@ function Cards({ devotions, label }: { devotions: DevotionBrief[]; label: string
 /** The Oratory: browse, search and filter the published devotions already held in one list (no request per keystroke). */
 export function DevotionLibraryPage() {
   const query = useQuery({ queryKey: ['devotions'], queryFn: () => api<DevotionBrief[]>('/devotions') })
+  const access = useEditorialAccess()
+  const isEditorial = !!access.data && (access.data.is_editor || access.data.is_approver)
   const [params, setParams] = useSearchParams()
   const text = params.get('q') ?? ''
   const categoryParam = params.get('category')
@@ -40,6 +43,7 @@ export function DevotionLibraryPage() {
     <h1 id="oratory-title">The Oratory</h1>
     <p className="oratory-subtitle">Bring what weighs on your heart to God.</p>
     <span className="oratory-rule" aria-hidden="true"><Cross size={15} strokeWidth={1.5} /></span>
+    {isEditorial && <Link className="oratory-editorial-link" to="/editorial/devotions"><PenLine size={15} aria-hidden="true" />Editorial review</Link>}
   </section>
 
   if (query.isPending) return <div className="oratory">{hero}<Loading /></div>
