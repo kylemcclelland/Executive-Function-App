@@ -4,13 +4,13 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Button } from '../ui'
 import { groupTexts, languageLabel, stepGroups, stepTextKey, versionsFor, visibleSteps, type TextGroup } from '../../lib/devotions'
 import type { Devotion, DevotionStep, PrayerText } from '../../types/devotions'
-import { LanguageSelect, LanguageUnavailable, PrayerVersion, TextSizeControl, UnpublishedNotice, type ReadingPreferences } from './PrayerText'
+import { LanguageSelect, LanguageUnavailable, PrayerVersion, TextSizeControl, NoTextNotice, type ReadingPreferences } from './PrayerText'
 
 interface VersionsProps { group: TextGroup | undefined; language: string; onChoose: (language: string) => void; response?: boolean; badge?: (text: PrayerText) => ReactNode }
 
 /** One prayer in the reader's language. If that language does not exist for it, it says so; it never shows another. */
 function Versions({ group, language, onChoose, response = false, badge }: VersionsProps) {
-  if (!group) return <UnpublishedNotice compact />
+  if (!group) return <NoTextNotice compact />
   const { shown, missing } = versionsFor(group.versions, language)
   return <div className={response ? 'is-response-text' : undefined}>
     {missing && <LanguageUnavailable language={language} available={group.versions.map(version => version.language)} onChoose={onChoose} subject="this prayer" />}
@@ -78,7 +78,7 @@ export function PrayerMode({ devotion, prefs, onClose, textBadge }: { devotion: 
         <div className="prayer-mode-body">
           {sequenced && current
             ? <StepView key={`${choice}-${index}`} devotion={devotion} step={current} groups={groups} language={language} onChoose={prefs.setLanguage} badge={textBadge} />
-            : <div className="prayer-step">{[...groups.values()].map(group => <Versions key={group.key} group={group} language={language} onChoose={prefs.setLanguage} badge={textBadge} />)}{groups.size === 0 && <UnpublishedNotice compact />}</div>}
+            : <div className="prayer-step">{[...groups.values()].map(group => <Versions key={group.key} group={group} language={language} onChoose={prefs.setLanguage} badge={textBadge} />)}{groups.size === 0 && <NoTextNotice compact />}</div>}
           <p className="sr-only" aria-live="polite">{`Reading in ${languageLabel(language)}.`}</p>
         </div>
         {sequenced && <nav className="prayer-mode-nav" aria-label="Prayer steps">

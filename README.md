@@ -110,12 +110,12 @@ a new Clerk account gets a new, empty account. Data created before authenticatio
 belongs to a legacy user with no Clerk link, so no sign-up can see it until the owner
 claims it deliberately: see [docs/clerk-data-migration-plan.md](docs/clerk-data-migration-plan.md).
 
-### Devotions (framework only)
+### Devotions (The Oratory)
 
-A reusable prayer/devotion page and an editorial approval workflow exist, with **no prayer content added or
-published**. Content needs a cited source, separate approval of the exact wording, and an explicit editor or approver
-role set in `EDITOR_CLERK_USER_IDS` / `APPROVER_CLERK_USER_IDS` (empty by default: nobody). See
-[docs/devotions-architecture.md](docs/devotions-architecture.md).
+The Oratory is a personal prayer and devotion library. Every devotion and prayer text held is readable by a signed-in
+user, with its source and rights information; bookmarks are private to their owner. Wording is added only by the seeding
+scripts, copied exactly from a supplied or cited source, and a record that holds only a citation is labelled as such.
+There is no approval workflow and no editor or approver role. See [docs/devotions-architecture.md](docs/devotions-architecture.md).
 
 ### Clerk dashboard setup
 

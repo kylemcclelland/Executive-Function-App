@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import select
-from test_devotions import BASE, approver, editor, move, reader, roles  # noqa: F401
+from test_devotions import reader  # noqa: F401
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -74,15 +74,6 @@ def test_seeding_creates_the_supplied_text_unverified_unapproved_with_its_proven
     assert hashlib.sha256(BALTIMORE.encode()).hexdigest() in row.license_notes                    # the replaced edition is identified by its hash
 
 
-def test_it_cannot_be_verified_until_a_source_and_rights_are_recorded(application, run, editor):
-    run("--execute")
-    brief = next(d for d in editor.get(BASE).json() if d["slug"] == "act-of-contrition")
-    detail = editor.get(f"{BASE}/{brief['id']}").json()
-    text = next(t for t in detail["texts"] if t["language"] == "en")
-    assert text["has_body"] and text["rights_cleared"] is False
-    assert editor.post(f"{BASE}/{detail['id']}/texts/{text['id']}/transition", json={"to": "source_verified"}).status_code == 409
-
-
 def test_a_database_holding_the_earlier_approved_edition_is_replaced_and_returned_to_proposed(application, run):
     run("--execute")
     text_id = put_back_the_earlier_edition_approved(application)
@@ -121,13 +112,14 @@ def test_a_text_edited_since_is_never_replaced(application, run):
         assert db.get(PrayerText, text_id).body == "A reviewer's own wording"
 
 
-def test_the_supplied_text_is_not_public_until_approved_and_published(application, run, reader, editor, approver):
-    run("--execute")
-    response = reader.get("/api/devotions/act-of-contrition")
-    assert response.status_code == 404 and "heartily sorry" not in response.text
-    assert reader.get("/api/devotions").json() == []
-
-
 def test_the_earlier_cited_record_is_kept_in_the_sources_file():
     assert seed.earlier_wording(("act-of-contrition", "main", "en"))["body"] == BALTIMORE
     assert "pains of hell" in BALTIMORE                                                           # it is the different, earlier edition
+
+
+def test_the_supplied_text_is_readable_in_the_library_with_its_source_and_rights_unverified(application, run, reader):
+    run("--execute")
+    texts = {t["language"]: t for t in reader.get("/api/devotions/act-of-contrition").json()["texts"]}
+    assert texts["en"]["body"] == EXPECTED and texts["en"]["has_wording"] is True
+    assert texts["en"]["source"]["title"] == "User-supplied text" and texts["en"]["source"]["license_status"] == "unverified"
+    assert texts["la"]["has_wording"] is False and texts["la"]["body"] == ""                       # the Latin is a citation only, labelled as such

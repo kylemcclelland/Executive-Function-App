@@ -556,3 +556,31 @@ class DevotionBookmark(Base):
     devotion_id: Mapped[UUID] = mapped_column(
         ForeignKey("devotions.id", ondelete="CASCADE"), primary_key=True,
     )
+
+
+class SavedOfficeUnit(Base):
+    """A prayer one user saved from the Divine Office: a server-verified snapshot with provenance.
+
+    The server copies the text from the Divinum Officium engine when saving (never from the client),
+    so it reopens unchanged whatever upstream later does. ``unit_key`` identifies the selection: a
+    content hash for fixed prayers (psalms, canticles, hymns), plus the date and hour for an
+    antiphon, which belongs to its day.
+    """
+
+    __tablename__ = "saved_office_units"
+    __table_args__ = (
+        UniqueConstraint("user_id", "unit_key", name="uq_saved_office_user_unit"),
+        Index("ix_saved_office_user", "user_id", "created_at"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    unit_key: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(20))
+    title_latin: Mapped[str] = mapped_column(String(300))
+    title_english: Mapped[str | None] = mapped_column(String(300))
+    date_specific: Mapped[bool] = mapped_column(default=False)
+    source_hour: Mapped[str] = mapped_column(String(20))
+    source_date: Mapped[date] = mapped_column()
+    content: Mapped[dict] = mapped_column(JSON)
+    source: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

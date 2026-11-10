@@ -43,33 +43,21 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:5173/api/integrations/google-calendar/callback"
     # Where the browser is sent after the callback; the only place the backend ever redirects to.
     frontend_url: str = "http://localhost:5173"
+    # The Divine Office is computed by a local checkout of Divinum Officium (https://github.com/DivinumOfficium/divinum-officium).
+    # Unset: the Office reports itself unavailable; nothing is composed without the engine.
+    divinum_officium_path: str | None = None
+    divinum_officium_perl: str = "perl"
+    divinum_officium_perl5lib: str | None = None
     cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173", "http://127.0.0.1:5173",
     ]
-    # Devotional content is approved by hand. Nobody holds either role unless their verified Clerk
-    # user id is listed here, so no user, however signed in, can edit or approve content by default.
-    # Editors enter and verify sourced content; approvers approve and publish it. Never settable
-    # through the API.
-    editor_clerk_user_ids: Annotated[list[str], NoDecode] = []
-    approver_clerk_user_ids: Annotated[list[str], NoDecode] = []
-
-    @field_validator(
-        "cors_origins", "clerk_authorized_parties", "editor_clerk_user_ids",
-        "approver_clerk_user_ids", mode="before",
-    )
+    @field_validator("cors_origins", "clerk_authorized_parties", mode="before")
     @classmethod
     def parse_origins(cls, value):
         if isinstance(value, str):
             if value.lstrip().startswith("["):
                 return json.loads(value)
             return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
-
-    @field_validator("editor_clerk_user_ids", "approver_clerk_user_ids")
-    @classmethod
-    def clerk_user_ids(cls, value: list[str]) -> list[str]:
-        if bad := [item for item in value if not item.startswith("user_")]:
-            raise ValueError(f"not Clerk user ids (expected user_...): {bad}")
         return value
 
     @field_validator("dev_user_timezone")

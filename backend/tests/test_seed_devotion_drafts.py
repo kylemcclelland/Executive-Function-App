@@ -10,7 +10,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import func, select, text
-from test_devotions import BASE, approver, editor, move, reader, roles  # noqa: F401
+from test_devotions import reader  # noqa: F401
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -58,6 +58,7 @@ def counts(application):
 
 
 # ---- The ten drafts --------------------------------------------------------------------------------------
+
 def test_the_ten_devotions_and_their_categories_are_exactly_as_specified():
     assert [(d["code"], d["slug"], d["title"], d["category"]) for d in seed.load_drafts()] == TEN
 
@@ -74,7 +75,7 @@ def test_a_dry_run_changes_nothing_but_reports_what_would_happen(application, ru
     assert counts(application) == before == [0, 0, 0]
 
 
-def test_seeding_creates_ten_unpublished_drafts_and_approves_nothing(application, run, reader):
+def test_seeding_creates_the_devotions_and_approves_nothing_yet_all_are_readable(application, run, reader):
     code, output = run("--execute")
     assert code == 0 and "Nothing was verified, approved or published" in output
     devotions = rows(application, Devotion)
@@ -83,9 +84,9 @@ def test_seeding_creates_ten_unpublished_drafts_and_approves_nothing(application
         assert (d.status, d.prose_origin, d.created_by) == ("proposed", "ai_draft", "seed:devotion-drafts-v1")
         assert d.approved_by is None and d.approved_hash is None and d.published_at is None and d.source_verified_by is None
     assert all(t.status == "proposed" and t.approved_by is None and t.source_verified_by is None for t in rows(application, PrayerText))
-    assert reader.get("/api/devotions").json() == []                       # nothing is public
+    assert sorted(d["slug"] for d in reader.get("/api/devotions").json()) == sorted(slug for _, slug, _, _ in TEN)    # no approval is needed to read them
     for _, slug, _, _ in TEN:
-        assert reader.get(f"/api/devotions/{slug}").status_code == 404
+        assert reader.get(f"/api/devotions/{slug}").status_code == 200
 
 
 def test_each_record_remembers_which_draft_it_was(application, run):
@@ -96,6 +97,7 @@ def test_each_record_remembers_which_draft_it_was(application, run):
 
 
 # ---- Idempotent, and it never overwrites -------------------------------------------------------------------
+
 def test_running_it_again_duplicates_nothing(application, run):
     run("--execute")
     after_first = counts(application)
@@ -104,7 +106,7 @@ def test_running_it_again_duplicates_nothing(application, run):
     assert counts(application) == after_first
 
 
-def test_a_devotion_that_exists_is_left_completely_untouched(application, run, editor, approver):
+def test_a_devotion_that_exists_is_left_completely_untouched(application, run):
     run("--execute")
     with application.state.session_factory.begin() as db:
         devotion = db.scalar(select(Devotion).where(Devotion.slug == "our-father"))
@@ -115,22 +117,6 @@ def test_a_devotion_that_exists_is_left_completely_untouched(application, run, e
     with application.state.session_factory() as db:
         devotion = db.get(Devotion, devotion_id)
         assert (devotion.title, devotion.overview) == ("Our Father (edited by an editor)", "A reviewer's own words.")
-
-
-def test_existing_editorial_decisions_survive_a_rerun(application, run, editor, approver):
-    run("--execute")
-    listing = {d["slug"]: d for d in editor.get(BASE).json()}
-    sign = editor.get(f"{BASE}/{listing['sign-of-the-cross']['id']}").json()
-    english = next(t for t in sign["texts"] if t["language"] == "en")
-    url = f"{BASE}/{sign['id']}/texts/{english['id']}/transition"
-    move(editor, url, "source_verified")
-    move(editor, url, "pending_approval")
-    move(approver, url, "approved")
-    before = editor.get(f"{BASE}/{sign['id']}").json()
-    run("--execute", "--add-missing-texts")
-    after = editor.get(f"{BASE}/{sign['id']}").json()
-    assert [(t["status"], t["approved_by"], t["body"]) for t in after["texts"]] == [(t["status"], t["approved_by"], t["body"]) for t in before["texts"]]
-    assert next(t for t in after["texts"] if t["language"] == "en")["status"] == "approved"
 
 
 def test_a_removed_text_is_not_quietly_put_back_unless_asked(application, run):
@@ -146,6 +132,7 @@ def test_a_removed_text_is_not_quietly_put_back_unless_asked(application, run):
 
 
 # ---- No wording is invented -----------------------------------------------------------------------------
+
 def test_the_draft_module_contains_no_prayer_wording():
     drafted = " ".join(
         [d["overview"] or "" for d in seed.load_drafts()] + [i for d in seed.load_drafts() for i in d["instructions"]]
@@ -232,6 +219,7 @@ def test_no_wording_appears_in_the_editorial_log(application, run):
 
 
 # ---- The Holy Rosary ------------------------------------------------------------------------------------
+
 def test_the_rosary_reuses_the_other_devotions_prayers_and_marks_its_optional_customs(application, run):
     run("--execute")
     with application.state.session_factory() as db:
@@ -252,42 +240,8 @@ def test_the_rosary_reuses_the_other_devotions_prayers_and_marks_its_optional_cu
         assert mysteries == ["1. The Annunciation", "2. The Visitation", "3. The Nativity", "4. The Presentation", "5. The Finding in the Temple"]
 
 
-def test_the_rosary_can_be_verified_but_not_published_before_the_prayers_it_reuses(application, run, editor):
-    run("--execute")
-    by_slug = {d["slug"]: d for d in editor.get(BASE).json()}
-    rosary = editor.get(f"{BASE}/{by_slug['the-holy-rosary']['id']}").json()
-    assert rosary["problems"] == []                                                # its structure is complete
-    problems = " ".join(rosary["publication_problems"])
-    assert "No prayer text is approved yet" in problems
-    for slug in ("sign-of-the-cross", "apostles-creed", "our-father", "hail-mary", "glory-be"):
-        assert f"{slug}/main, but that devotion is not published yet" in problems
-    assert "fatima" not in problems.lower()                                        # an optional custom never blocks
-    assert len(rosary["publication_problems"]) <= 10                               # one line per unmet prayer, not one per step
-
-
-def test_a_simple_prayer_can_travel_the_whole_path_to_publication(application, run, editor, approver, reader):
-    run("--execute")
-    by_slug = {d["slug"]: d for d in editor.get(BASE).json()}
-    glory = editor.get(f"{BASE}/{by_slug['glory-be']['id']}").json()
-    english = next(t for t in glory["texts"] if t["language"] == "en")
-    latin = next(t for t in glory["texts"] if t["language"] == "la")
-    assert editor.post(f"{BASE}/{glory['id']}/texts/{latin['id']}/transition", json={"to": "source_verified"}).status_code == 409   # rights not cleared
-    url = f"{BASE}/{glory['id']}/texts/{english['id']}/transition"
-    for step, who in (("source_verified", editor), ("pending_approval", editor), ("approved", approver)):
-        move(who, url, step)
-    dev = f"{BASE}/{glory['id']}/transition"
-    for step, who in (("source_verified", editor), ("pending_approval", editor), ("approved", approver), ("published", approver)):
-        move(who, dev, step)
-    page = reader.get("/api/devotions/glory-be").json()
-    assert [t["language"] for t in page["texts"]] == ["en"]                        # Latin is withheld, English alone is published
-
-
-def test_seeded_prose_is_labelled_unapproved_until_the_devotion_is_approved(application, run, editor):
-    run("--execute")
-    assert {d["prose_origin"] for d in editor.get(BASE).json()} == {"ai_draft"}
-
-
 # ---- Refusals ------------------------------------------------------------------------------------------
+
 def test_it_refuses_a_database_that_is_not_migrated_far_enough(application, run):
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     with application.state.engine.begin() as connection:
@@ -362,16 +316,6 @@ def test_the_six_carry_a_historical_introduction_a_purpose_occasions_and_citatio
     for item in seed.load_drafts({f"DEV-00{n}" for n in range(1, 7)}):
         assert item["background"] and item["significance"] and item["references"], item["slug"]
         assert any(line.startswith("Traditional occasions:") for line in item["instructions"]), item["slug"]
-
-
-def test_the_six_can_reach_verification_and_stay_invisible_until_approved(application, run, editor, reader):
-    run("--execute", "--codes", SIX)
-    for brief in editor.get(BASE).json():
-        detail = editor.get(f"{BASE}/{brief['id']}").json()
-        assert detail["problems"] == [], (brief["slug"], detail["problems"])        # nothing structural blocks verification
-        assert detail["status"] == "proposed" and detail["prose_origin"] == "ai_draft"
-        assert reader.get(f"/api/devotions/{brief['slug']}").status_code == 404
-    assert reader.get("/api/devotions").json() == []
 
 
 def test_the_dossier_document_matches_the_data_and_contains_no_wording():

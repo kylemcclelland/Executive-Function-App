@@ -86,3 +86,26 @@ describe('the collection of Rosary prayers', () => {
     expect(groups.length * 2 + rest.length).toBe(all.length)
   })
 })
+
+describe('a library without an approval step', () => {
+  it('labels a citation-only record clearly and never shows it as a prayer', () => {
+    view({ ...base, texts: [text('main', 'en', 'English filler wording'), text('main', 'la', '', { source: { ...source, title: 'A Cited Edition' } })] })
+    expect(screen.queryByText(/approved|published/i)).toBeNull()
+    expect(document.querySelectorAll('.prayer-body')).toHaveLength(1)                 // only the English has wording to show
+  })
+
+  it('shows a citation-only Latin text as such, with its source, when Latin is chosen', async () => {
+    view({ ...base, texts: [text('main', 'en', 'English filler wording'), text('main', 'la', '', { source: { ...source, title: 'A Cited Edition' } })] })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'la')
+    expect(screen.getByText('Citation only.')).toBeInTheDocument()
+    expect(screen.getByText(/No wording is held for this text/)).toBeInTheDocument()
+    expect(screen.getByText('A Cited Edition')).toBeInTheDocument()
+    expect(document.querySelectorAll('.prayer-body')).toHaveLength(0)
+  })
+
+  it('shows the Rosary prayers with no approval or publication wording anywhere on the page', () => {
+    view(rosary)
+    expect(document.body.textContent).not.toMatch(/approv|publish|editorial|review queue/i)
+  })
+})
+

@@ -7,7 +7,7 @@ import type { LanguageChoice, PrayerText, TextSource } from '../../types/devotio
 export type ReadingPreferences = ReturnType<typeof useReadingPreferences>
 
 /**
- * Prayer wording, shown exactly as approved: every character, space and line break is kept (the text
+ * Prayer wording, shown exactly as stored: every character, space and line break is kept (the text
  * node content equals the stored body). Nothing is trimmed, re-wrapped, translated or corrected here.
  */
 export function PrayerBody({ text }: { text: PrayerText }) {
@@ -34,19 +34,20 @@ export function SourceNote({ source }: { source: TextSource }) {
 /** One language version of a prayer: its title, exact wording and where it came from. */
 export function PrayerVersion({ text, showLanguage, compact = false, badge }: { text: PrayerText; showLanguage: boolean; compact?: boolean; badge?: ReactNode }) {
   const withheld = !text.body.trim()
+  // A citation-only record has no wording (rights not cleared, or not supplied): it is labelled, never shown as a prayer.
   return <div className="prayer-version">
     {(showLanguage || badge) && <p className="prayer-language">{showLanguage && languageLabel(text.language)}{badge}</p>}
     {text.title && <h3 className="prayer-title" lang={text.language}>{text.title}</h3>}
-    {withheld ? <p className="prayer-withheld">No wording is held for this text. See its source.</p> : <PrayerBody text={text} />}
+    {withheld ? <p className="prayer-withheld"><strong>Citation only.</strong> No wording is held for this text; see its source below.</p> : <PrayerBody text={text} />}
     {compact ? <details className="prayer-source-details"><summary>Source</summary><SourceNote source={text.source} /></details> : <SourceNote source={text.source} />}
   </div>
 }
 
-/** Shown wherever approved wording does not exist (yet). It never hints at what the wording is. */
-export function UnpublishedNotice({ compact = false }: { compact?: boolean }) {
+/** Shown wherever no prayer text is held (yet). */
+export function NoTextNotice({ compact = false }: { compact?: boolean }) {
   return <div className={`prayer-unpublished ${compact ? 'is-compact' : ''}`} role="note">
     <Feather size={compact ? 16 : 22} strokeWidth={1.4} aria-hidden="true" />
-    <div><p><strong>The prayer text has not been published yet.</strong></p>{!compact && <p className="muted">Prayer wording appears here only after its source has been verified and the exact text has been approved.</p>}</div>
+    <div><p><strong>No prayer text is held for this devotion yet.</strong></p>{!compact && <p className="muted">Wording appears here once a text has been added to the library.</p>}</div>
   </div>
 }
 

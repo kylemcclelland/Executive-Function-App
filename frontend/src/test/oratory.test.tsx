@@ -23,19 +23,16 @@ const library = (): DevotionBrief[] => [
 
 let requests: { path: string; method: string }[]
 let respond: () => Response | Promise<Response>
-let access = { is_editor: false, is_approver: false }
 let queryClient: QueryClient
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
 function stub(list: DevotionBrief[] | (() => Response | Promise<Response>)) {
   requests = []
-  access = { is_editor: false, is_approver: false }
   respond = typeof list === 'function' ? list : () => json(list)
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } })
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: RequestInit) => {
     const path = input.replace('/api', '')
     requests.push({ path, method: options?.method ?? 'GET' })
-    if (path === '/editorial-access') return json(access)
     if (path === '/devotions') return respond()
     const slug = path.replace('/devotions/', '')
     return json({ ...brief(slug, `Filler ${slug}`), overview: 'Overview filler', background: null, significance: null, references: [], instructions: [], steps: [], texts: [] })
@@ -71,7 +68,7 @@ describe('an empty library', () => {
     stub([])
     open()
     expect(await screen.findByText('No devotions have been added yet')).toBeInTheDocument()
-    expect(screen.getByText(/This library will grow as prayers are carefully sourced and approved\./)).toBeInTheDocument()
+    expect(screen.getByText(/Devotions you add will appear here\./)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
     expect(document.querySelectorAll('.devotion-card')).toHaveLength(0)
@@ -85,9 +82,9 @@ describe('an empty library', () => {
     expect(screen.getByRole('searchbox', { name: 'Search devotions' })).toBeInTheDocument()
     const categories = within(screen.getByRole('group', { name: 'Categories' })).getAllByRole('button')
     expect(categories.map(button => button.textContent)).toEqual(['All Devotions', 'Daily Prayer', 'Our Lord', 'Our Lady', 'Saints', 'Liturgical Seasons', 'Other'])
-    const saved = screen.getByRole('region', { name: 'Saved devotions' })
+    const saved = screen.getByRole('region', { name: 'Saved prayers' })
     expect(within(saved).getByText('Nothing saved yet')).toBeInTheDocument()
-    expect(within(saved).getByText(/When you save a devotion, it will wait for you here\./)).toBeInTheDocument()
+    expect(within(saved).getByText(/When you save a devotion, or a prayer from the Divine Office, it will wait for you here./)).toBeInTheDocument()
   })
 
   it('does not call an empty library a failed search, whatever is typed or chosen', async () => {
@@ -115,8 +112,8 @@ describe('published devotion cards', () => {
     expect(within(alpha).getByLabelText('Saved')).toBeInTheDocument()
     const beta = within(section).getByRole('link', { name: /Filler Beta/ })
     expect(within(beta).queryByLabelText('Saved')).not.toBeInTheDocument()
-    expect(within(beta).getByText('Prayer text not yet published')).toBeInTheDocument()
-    expect(within(alpha).queryByText('Prayer text not yet published')).not.toBeInTheDocument()
+    expect(within(beta).getByText('No prayer text yet')).toBeInTheDocument()
+    expect(within(alpha).queryByText('No prayer text yet')).not.toBeInTheDocument()
     expect(within(section).getAllByRole('listitem')).toHaveLength(5)
   })
 
@@ -269,7 +266,7 @@ describe('categories', () => {
     await screen.findByRole('region', { name: 'All devotions' })
     await userEvent.click(screen.getByRole('button', { name: 'Our Lord' }))
     expect(screen.getByText('Nothing in Our Lord yet')).toBeInTheDocument()
-    expect(screen.getByText(/This category will fill as prayers are carefully sourced and approved\./)).toBeInTheDocument()
+    expect(screen.getByText(/Nothing is filed under this category yet\./)).toBeInTheDocument()
     expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Show all devotions' }))
     expect(titles()).toHaveLength(5)
@@ -297,7 +294,7 @@ describe('saved devotions', () => {
   it('lists the reader’s bookmarked devotions in their own section', async () => {
     stub(library())
     open()
-    const saved = await screen.findByRole('region', { name: 'Saved devotions' })
+    const saved = await screen.findByRole('region', { name: 'Saved prayers' })
     expect(within(saved).getAllByRole('link').map(link => link.querySelector('.devotion-card-title')!.textContent)).toEqual(['Filler Alpha', 'Filler Gamma'])
     expect(within(saved).queryByText('Nothing saved yet')).not.toBeInTheDocument()
   })
@@ -305,17 +302,17 @@ describe('saved devotions', () => {
   it('is not narrowed by the search or the category, which only shape the library below it', async () => {
     stub(library())
     open()
-    await screen.findByRole('region', { name: 'Saved devotions' })
+    await screen.findByRole('region', { name: 'Saved prayers' })
     await userEvent.type(screen.getByRole('searchbox'), 'epsilon')
     await userEvent.click(screen.getByRole('button', { name: 'Saints' }))
-    expect(within(screen.getByRole('region', { name: 'Saved devotions' })).getAllByRole('link')).toHaveLength(2)
+    expect(within(screen.getByRole('region', { name: 'Saved prayers' })).getAllByRole('link')).toHaveLength(2)
     expect(titles().filter(title => title === 'Filler Epsilon')).toHaveLength(1)
   })
 
   it('welcomes the reader when nothing has been saved', async () => {
     stub(library().map(devotion => ({ ...devotion, bookmarked: false })))
     open()
-    const saved = await screen.findByRole('region', { name: 'Saved devotions' })
+    const saved = await screen.findByRole('region', { name: 'Saved prayers' })
     expect(within(saved).getByText('Nothing saved yet')).toBeInTheDocument()
     expect(within(saved).queryByRole('link')).not.toBeInTheDocument()
   })
@@ -420,27 +417,21 @@ describe('waiting for the list', () => {
   })
 })
 
-describe('the editors-only entrance', () => {
-  it('shows no editorial link to an ordinary reader', async () => {
+describe('the Divine Office entrance', () => {
+  it('links from The Oratory to the Divine Office', async () => {
     stub(library())
     open()
     await screen.findByRole('region', { name: 'All devotions' })
-    expect(screen.queryByRole('link', { name: 'Editorial review' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'The Divine Office' })).toHaveAttribute('href', '/divine-office')
   })
+})
 
-  it.each([['an editor', { is_editor: true, is_approver: false }], ['an approver', { is_editor: false, is_approver: true }]])('shows %s a quiet link to the review queue', async (_who, roles) => {
+describe('no editorial entrance', () => {
+  it('shows no editorial link and never asks the server about editorial roles', async () => {
     stub(library())
-    access = roles
-    open()
-    expect(await screen.findByRole('link', { name: 'Editorial review' })).toHaveAttribute('href', '/editorial/devotions')
-  })
-
-  it('does not let a failed roles request look like an editorial link or break the library', async () => {
-    stub(library())
-    vi.stubGlobal('fetch', vi.fn(async (input: string) => input.includes('/editorial-access') ? json({ detail: 'down' }, 503) : json(library())))
     open()
     await screen.findByRole('region', { name: 'All devotions' })
-    expect(screen.queryByRole('link', { name: 'Editorial review' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /editorial/i })).not.toBeInTheDocument()
+    expect(requests.some(request => request.path.includes('editorial'))).toBe(false)
   })
 })

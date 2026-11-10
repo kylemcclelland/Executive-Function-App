@@ -12,7 +12,7 @@ const anchorOf = (group: TextGroup) => `prayer-${group.slot}`
 /**
  * A devotion's ordered collection of prayers (for the Rosary: from the Sign of the Cross to the closing prayers). Each prayer is shown in the
  * reader's language, or, on request, Latin and English side by side (stacked on a narrow screen). A language a prayer does not have is
- * stated, never replaced by another. Only approved wording ever reaches this component; it shows nothing when there is none.
+ * stated, never replaced by another. It shows nothing when the devotion holds no collection.
  */
 export function PrayerCollection({ groups, prefs, textBadge, heading = 'The Prayers of the Rosary' }: { groups: TextGroup[]; prefs: ReadingPreferences; textBadge?: (text: PrayerText) => ReactNode; heading?: string }) {
   const [layout, setLayout] = useState<Layout>('one')

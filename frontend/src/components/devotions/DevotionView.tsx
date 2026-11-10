@@ -12,7 +12,7 @@ interface DevotionViewProps {
   backTo?: string
   backLabel?: string
   banner?: ReactNode
-  /** Labels the explanatory prose (used in the private preview, where it is not yet approved). */
+  /** Labels the explanatory prose (used by the layout preview). */
   proseNote?: ReactNode
   /** A mark shown with each prayer text (used in the private preview to show its approval state). */
   textBadge?: (text: PrayerText) => ReactNode
@@ -23,7 +23,7 @@ interface DevotionViewProps {
 /**
  * The one page template for every devotion, whether a single prayer or a multi-step sequence.
  * Sections whose content is absent are not rendered; the prayer text section always is, showing a
- * placeholder until approved wording exists. The Language dropdown sits at the top, and the choice
+ * placeholder until a text is held. The Language dropdown sits at the top, and the choice
  * is remembered. Nothing on this page records that anything was prayed.
  */
 export function DevotionView({ devotion, backTo = '/devotions', backLabel, banner, proseNote, textBadge, onToggleBookmark, bookmarkPending }: DevotionViewProps) {

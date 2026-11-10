@@ -8,17 +8,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import select
-from test_devotions import (  # noqa: F401
-    BASE,
-    approve_text,
-    approver,
-    editor,
-    make_devotion,
-    make_text,
-    move,
-    reader,
-    roles,
-)
+from test_devotions import reader  # noqa: F401
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -52,6 +42,7 @@ def latin(application):
 
 
 # ---- Import integrity, checked independently of the importer -------------------------------------------------
+
 def test_the_six_prayers_in_the_file_were_found_and_matched_to_the_right_devotions():
     assert {item["heading_in_file"]: item["devotion_slug"] for item in DATA["texts"]} == MATCH
     assert DATA["provenance"] == "User-supplied Latin text" and DATA["filename"] == "latin_prayers_file.txt" and DATA["file_sha256"] == FILE_SHA
@@ -101,6 +92,7 @@ def test_the_importer_refuses_a_file_it_cannot_slice_safely(tmp_path):
 
 
 # ---- What seeding records ------------------------------------------------------------------------------------
+
 def test_each_supplied_text_is_recorded_with_its_provenance_and_is_unverified_and_unapproved(application, run):
     assert run("--execute")[0] == 0
     import latin_normalization
@@ -135,62 +127,9 @@ def test_prayers_not_in_the_file_keep_their_earlier_records(application, run):
     assert not has_body(texts["act-of-contrition"]) and texts["act-of-contrition"].license_status == "restricted"
 
 
-def test_regina_caeli_is_dev_007_under_our_lady_with_latin_only(application, run, editor):
-    run("--execute")
-    brief = next(d for d in editor.get(BASE).json() if d["slug"] == "regina-caeli")
-    assert (brief["category"], brief["status"]) == ("Our Lady", "proposed")
-    assert [(t["language"], t["status"], t["license_status"], t["has_body"]) for t in brief["texts"]] == [("la", "proposed", "unverified", True)]
-    detail = editor.get(f"{BASE}/{brief['id']}").json()
-    assert not any(t["language"] == "en" for t in detail["texts"])                   # English is unavailable, not generated
-    assert detail["prose_origin"] == "ai_draft"
-    seeded = next(d for d in seed.load_drafts() if d["slug"] == "regina-caeli")
-    assert seeded["code"] == "DEV-007" and seeded["category"] == "Our Lady"
-
-
 # ---- Separate verification and approval -------------------------------------------------------------------
-def test_a_supplied_text_cannot_be_verified_until_its_source_and_rights_are_recorded(application, run, editor):
-    run("--execute")
-    detail = editor.get(f"{BASE}/{next(d for d in editor.get(BASE).json() if d['slug'] == 'our-father')['id']}").json()
-    latin_text = next(t for t in detail["texts"] if t["language"] == "la")
-    assert latin_text["has_body"] and latin_text["rights_cleared"] is False
-    assert any("Record whether the wording is public domain" in problem for problem in latin_text["problems"])
-    refused = editor.post(f"{BASE}/{detail['id']}/texts/{latin_text['id']}/transition", json={"to": "source_verified"})
-    assert refused.status_code == 409
-
-
-def test_english_and_latin_keep_separate_states_and_approving_one_never_touches_the_other(application, run, editor, approver, reader):
-    run("--execute")
-    brief = next(d for d in editor.get(BASE).json() if d["slug"] == "our-father")
-    detail = editor.get(f"{BASE}/{brief['id']}").json()
-    english = next(t for t in detail["texts"] if t["language"] == "en")
-    approve_text(editor, approver, detail, english)
-    after = {t["language"]: t["status"] for t in editor.get(f"{BASE}/{brief['id']}").json()["texts"]}
-    assert after == {"en": "approved", "la": "proposed"}
-    dev = f"{BASE}/{brief['id']}/transition"
-    for step, who in (("source_verified", editor), ("pending_approval", editor), ("approved", approver), ("published", approver)):
-        move(who, dev, step)
-    page = reader.get("/api/devotions/our-father")
-    assert [t["language"] for t in page.json()["texts"]] == ["en"]
-    assert "Pater noster" not in page.text and "qui es in caelis" not in page.text      # the unapproved Latin is not public
-
-
-def test_changing_a_supplied_text_invalidates_nothing_that_was_never_approved_but_changing_an_approved_one_does(application, run, editor, approver):
-    devotion = make_devotion(editor, "filler")
-    text = make_text(editor, devotion, language="la", body="Latin filler", is_translation=False)
-    approve_text(editor, approver, devotion, text)
-    edited = editor.patch(f"{BASE}/{devotion['id']}/texts/{text['id']}", json={"body": "Latin filler changed"}).json()
-    assert edited["status"] == "proposed" and edited["approval_current"] is False
-
 
 # ---- Nothing unapproved is public; nothing approved is overwritten -------------------------------------
-def test_no_supplied_text_is_reachable_by_an_ordinary_reader(application, run, reader):
-    run("--execute")
-    assert reader.get("/api/devotions").json() == []
-    for item in DATA["texts"]:
-        response = reader.get(f"/api/devotions/{item['devotion_slug']}")
-        assert response.status_code == 404 and item["body"][:20] not in response.text
-    assert reader.get("/api/editorial/devotions").status_code == 403                   # and the inventory is for editors only
-
 
 def test_a_user_supplied_text_never_replaces_wording_that_is_already_held():
     held = [{"devotion_slug": "our-father", "slot": "main", "language": "la", "body": "Wording already held", "source_title": "x"}]
@@ -198,17 +137,24 @@ def test_a_user_supplied_text_never_replaces_wording_that_is_already_held():
         seed.merge_user_supplied(held)
 
 
-def test_seeding_again_over_an_approved_latin_text_leaves_it_alone(application, run, editor):
-    from datetime import UTC, datetime
-    from uuid import UUID
+def test_regina_caeli_is_dev_007_under_our_lady_with_latin_only(application, run, reader):
     run("--execute")
-    brief = next(d for d in editor.get(BASE).json() if d["slug"] == "our-father")
-    latin_text = next(t for t in editor.get(f"{BASE}/{brief['id']}").json()["texts"] if t["language"] == "la")
-    with application.state.session_factory.begin() as db:        # an earlier, approved decision on this text
-        row = db.get(PrayerText, UUID(latin_text["id"]))
-        row.body, row.license_status, row.source_url = "Approved Latin filler", "public_domain", "https://example.org/edition"
-        row.status, row.approved_by, row.approved_at, row.approved_hash = "approved", "user_approver", datetime.now(UTC), "recorded-earlier"
-        row.source_verified_by, row.source_verified_at = "user_editor", datetime.now(UTC)
-    run("--execute", "--add-missing-texts")
-    kept = latin(application)["our-father"]
-    assert (kept.body, kept.status, kept.approved_by, kept.approved_hash) == ("Approved Latin filler", "approved", "user_approver", "recorded-earlier")
+    brief = next(d for d in reader.get("/api/devotions").json() if d["slug"] == "regina-caeli")
+    assert brief["category"] == "Our Lady" and brief["has_text"] is True
+    detail = reader.get("/api/devotions/regina-caeli").json()
+    assert [(t["language"], t["has_wording"], t["source"]["license_status"]) for t in detail["texts"]] == [("la", True, "unverified")]   # English is unavailable, not generated
+    seeded = next(d for d in seed.load_drafts() if d["slug"] == "regina-caeli")
+    assert seeded["code"] == "DEV-007" and seeded["category"] == "Our Lady"
+
+
+def test_the_supplied_latin_is_readable_in_the_library_beside_the_english_with_its_source(application, run, reader):
+    run("--execute")
+    import latin_normalization
+    normalized = {slug: r["normalized"] for slug, r in latin_normalization.apply_all(DATA).items()}
+    for item in DATA["texts"]:
+        detail = reader.get(f"/api/devotions/{item['devotion_slug']}").json()
+        by_language = {t["language"]: t for t in detail["texts"]}
+        assert by_language["la"]["body"] == normalized[item["devotion_slug"]]                          # the normalized supplied wording, exactly
+        assert by_language["la"]["source"]["title"] == "User-supplied Latin text" and by_language["la"]["source"]["license_status"] == "unverified"
+        if item["devotion_slug"] != "regina-caeli":
+            assert by_language["en"]["has_wording"] is True                                             # English and Latin are separate texts

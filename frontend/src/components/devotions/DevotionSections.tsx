@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '../ui'
 import { availableLanguages, durationLabel, groupTexts, hasHowToPray, languageLabel, paragraphs, safeUrl, textGroupTitle, versionsFor } from '../../lib/devotions'
 import type { Devotion, DevotionStep, PrayerText } from '../../types/devotions'
-import { LanguageUnavailable, PrayerVersion, TextSizeControl, UnpublishedNotice, type ReadingPreferences } from './PrayerText'
+import { LanguageUnavailable, PrayerVersion, TextSizeControl, NoTextNotice, type ReadingPreferences } from './PrayerText'
 
 function Paragraphs({ text, className }: { text: string; className?: string }) {
   return <>{paragraphs(text).map((part, index) => <p key={index} className={className}>{part}</p>)}</>
@@ -117,7 +117,7 @@ export function PrayerTextSection({ devotion, prefs, onEnterPrayerMode, textBadg
       <h2 id="prayer-text-heading">Prayer Text</h2>
       {groups.length > 0 && <div className="reading-controls"><TextSizeControl prefs={prefs} /><Button variant="outline" onClick={onEnterPrayerMode}>Enter prayer mode</Button></div>}
     </div>
-    {groups.length === 0 ? <UnpublishedNotice />
+    {groups.length === 0 ? <NoTextNotice />
       : !readable ? <LanguageUnavailable language={language} available={available} onChoose={prefs.setLanguage} subject="this devotion" />
       : groups.map(group => {
         const { shown, missing } = versionsFor(group.versions, language)

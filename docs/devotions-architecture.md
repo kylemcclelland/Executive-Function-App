@@ -1,5 +1,13 @@
 # Devotions: the prayer page framework and its editorial safeguards
 
+> **Simplified (current state).** The approval and publication workflow described below has been retired. The Oratory shows every devotion and
+> every prayer text held; there is no editorial dashboard, no editor or approver role (`EDITOR_CLERK_USER_IDS` / `APPROVER_CLERK_USER_IDS` are
+> no longer read) and the editorial API endpoints are removed. The reader API is `GET /api/devotions`, `GET /api/devotions/{slug}` and the
+> bookmark routes, all for a signed-in user. A text with no wording is a citation-only record and is labelled "Citation only". The database
+> columns and the historical event log are kept unchanged (nothing was dropped); the sections below describe that history and how the data was
+> imported, and remain accurate about provenance, seeding and the exact-wording rule.
+
+
 **Status: framework only.** The application can display a prayer or a multi-step devotion and can enforce
 the approval workflow. **No prayer or devotional text has been written, seeded, stored or published.** A fresh
 database holds zero devotions and zero prayer texts (migration `0010` creates empty tables; a test asserts it).

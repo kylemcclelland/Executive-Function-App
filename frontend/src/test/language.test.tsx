@@ -143,7 +143,7 @@ describe('a language with no text', () => {
 
   it('shows the plain unpublished notice, not a language message, when there is no text at all', () => {
     view(base)
-    expect(screen.getByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(screen.getByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
     expect(screen.queryByRole('combobox', { name: 'Language' })).not.toBeInTheDocument()
   })
 })
@@ -297,7 +297,7 @@ describe('reusing a prayer kept in another devotion', () => {
   it('shows the unpublished notice for a reused prayer the server has not released', async () => {
     const reusing: Devotion = { ...base, slug: 'outer', steps: [{ kind: 'prayer', title: 'Reused', instruction: null, text_slot: 'main', devotion_slug: 'inner', repeat: null, section: null }], texts: [text('other', 'en', 'something else', { devotion_slug: 'outer' })] }
     const dialog = await openPrayerMode(reusing)
-    expect(within(dialog).getByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(within(dialog).getByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
   })
 })
 

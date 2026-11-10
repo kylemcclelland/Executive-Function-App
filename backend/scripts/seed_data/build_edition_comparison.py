@@ -123,14 +123,13 @@ def build() -> str:
         "* Differences are word-level (whitespace and line wrapping are ignored in the table; line structure is noted separately). \"Punctuation only\" means the same letters; "
         "\"spelling convention\" means the same word spelled by a different convention (for example Jesus / Iesus).", "",
     ]
-    rows, summary = [], []
+    summary = []
     for prayer in DOC["prayers"]:
         for language, field in (("en", "english"), ("la", "latin")):
             held = held_text(prayer["key"], language)
             summary.append((prayer, language, held))
     comparable = [s for s in summary if s[2]]
     identical = [s for s in comparable if s[2][0] == s[0]["english" if s[1] == "en" else "latin"]]
-    same_words = [s for s in comparable if s not in identical and " ".join(tokens(s[2][0])) == " ".join(tokens(s[0]["english" if s[1] == "en" else "latin"]))]
     lines += ["## Summary", "",
               f"* The document has 10 prayers (20 texts). **{len(comparable)} texts have an existing edition to compare** with: {sum(1 for s in comparable if s[1] == 'en')} English and {sum(1 for s in comparable if s[1] == 'la')} Latin.",
               f"* **{len(identical)} are identical** ({', '.join(f'{NAMES[s[0]['key']]} ({LANGUAGE[s[1]]})' for s in identical)}); **{len(comparable) - len(identical)} differ**.",

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import select
-from test_devotions import BASE, approve_text, approver, editor, move, reader, roles  # noqa: F401
+from test_devotions import reader  # noqa: F401
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -50,6 +50,7 @@ def tokens(text):
 
 
 # ---- 1. The holy name -------------------------------------------------------------------------------
+
 def test_every_iesus_is_now_jesus_and_no_other_form_was_touched():
     for slug, original in ORIGINAL.items():
         normalized = NORMALIZED[slug]
@@ -67,6 +68,7 @@ def test_the_rule_matches_whole_words_only():
 
 
 # ---- 2. The identified problems -----------------------------------------------------------------------
+
 def test_the_identified_typographical_problems_are_corrected():
     assert "\u00ad" in ORIGINAL["hail-mary"] and "\u00ad" not in NORMALIZED["hail-mary"] and "mulieribus," in NORMALIZED["hail-mary"]
     assert "caelos, sedet" in NORMALIZED["apostles-creed"] and "communionem, remissionem" in NORMALIZED["apostles-creed"]
@@ -84,6 +86,7 @@ def test_the_comma_after_gratia_plena_is_justified_by_a_named_edition_and_other_
 
 
 # ---- 3. Nothing else changed -----------------------------------------------------------------------------
+
 def test_exactly_the_authorized_words_changed_and_no_other_wording():
     allowed = {
         ("Iesus.", "Jesus."): 3, ("mulieri\u00adbus,", "mulieribus,"): 1, ("plena", "plena,"): 1,
@@ -115,6 +118,7 @@ def test_the_original_verbatim_transcription_and_its_provenance_are_preserved():
 
 
 # ---- 4-6. English, independence, and no public exposure ----------------------------------------------------
+
 def test_english_texts_and_the_unsupplied_latin_are_unchanged_and_the_latin_is_recorded_as_a_normalization(application, run):
     assert run("--execute")[0] == 0
     sources = {(t["devotion_slug"], t["slot"], t["language"]): t["body"] for t in json.loads((SCRIPTS / "seed_data" / "prayer_sources.json").read_text(encoding="utf-8"))["texts"]}
@@ -137,23 +141,8 @@ def test_english_texts_and_the_unsupplied_latin_are_unchanged_and_the_latin_is_r
             assert row.license_status == "unverified"                                     # a corrected spelling is not a verification
 
 
-def test_corrected_latin_stays_independently_reviewable_and_never_public(application, run, editor, approver, reader):
-    run("--execute")
-    brief = next(d for d in editor.get(BASE).json() if d["slug"] == "the-angelus")
-    detail = editor.get(f"{BASE}/{brief['id']}").json()
-    english = next(t for t in detail["texts"] if t["language"] == "en")
-    approve_text(editor, approver, detail, english)
-    after = {t["language"]: t["status"] for t in editor.get(f"{BASE}/{brief['id']}").json()["texts"]}
-    assert after == {"en": "approved", "la": "proposed"}
-    for step, who in (("source_verified", editor), ("pending_approval", editor), ("approved", approver), ("published", approver)):
-        move(who, f"{BASE}/{brief['id']}/transition", step)
-    page = reader.get("/api/devotions/the-angelus")
-    assert [t["language"] for t in page.json()["texts"]] == ["en"]
-    assert "Angelus Domini nuntiavit" not in page.text and "Ecce ancilla" not in page.text   # the unapproved Latin is not in the response
-    assert reader.get("/api/devotions/regina-caeli").status_code == 404 and reader.get("/api/devotions/hail-mary").status_code == 404
-
-
 # ---- 7. Applying it to a database, and reimporting -----------------------------------------------------------
+
 def make_old(application, slug, *, approved=False):
     """Put a Latin text into the state an earlier (verbatim) import left it in, optionally approved."""
     with application.state.session_factory.begin() as db:
@@ -248,3 +237,12 @@ def test_the_before_and_after_document_matches_the_data():
     doc = (Path(__file__).resolve().parents[2] / "docs" / "latin-normalization-diff.md").read_text(encoding="utf-8")
     assert doc == norm.render(DATA, norm.apply_all(DATA)), "docs/latin-normalization-diff.md is out of date: run latin_normalization.py"
     assert "Proposed, NOT applied" in doc and "Nothing was verified, approved or published" in doc
+
+
+def test_corrected_latin_is_readable_beside_the_english_with_its_provenance(application, run, reader):
+    run("--execute")
+    detail = reader.get("/api/devotions/the-angelus").json()
+    by_language = {t["language"]: t for t in detail["texts"]}
+    assert by_language["la"]["body"] == NORMALIZED["the-angelus"] and "Iesus" not in by_language["la"]["body"]
+    assert by_language["la"]["source"]["title"] == "User-supplied Latin text" and by_language["la"]["source"]["license_status"] == "unverified"
+    assert by_language["en"]["has_wording"] is True and by_language["en"]["source"]["license_status"] == "public_domain"

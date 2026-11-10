@@ -90,7 +90,7 @@ describe('missing optional sections', () => {
     expect(heading('How to Pray')).not.toBeInTheDocument()
     for (const hidden of ['Historical background', 'Spiritual significance', 'Sources', 'About 10 minutes', 'Category', 'Subtitle will appear here']) expect(screen.queryByText(hidden)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Save|Saved/ })).not.toBeInTheDocument()   // no bookmark handler, no button
-    expect(screen.getByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(screen.getByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
     expect(screen.queryByRole('button', { name: 'Enter prayer mode' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument()
   })
@@ -229,7 +229,7 @@ describe('prayer mode', () => {
     const dialog = await open(placeholderDevotion('sequence'))
     for (let i = 0; i < 4; i++) await userEvent.click(within(dialog).getByRole('button', { name: /Next/ }))
     expect(within(dialog).getByText('Step 5 of 5')).toBeInTheDocument()
-    expect(within(dialog).getByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(within(dialog).getByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
   })
 
   it('follows the language and size choices made in the dialog', async () => {
@@ -303,7 +303,7 @@ describe('devotion page', () => {
   it('shows the unpublished placeholder when the server sends no approved text', async () => {
     stubApi([{ ...published, texts: [], has_text: false }])
     app('/devotions/test-devotion')
-    expect(await screen.findByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(await screen.findByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
     expect(screen.queryByRole('button', { name: 'Enter prayer mode' })).not.toBeInTheDocument()
   })
 
@@ -325,7 +325,7 @@ describe('layout preview page', () => {
     await userEvent.click(screen.getByRole('link', { name: 'Multi-step devotion' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Devotion Title' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Missing optional sections' }))
-    expect(await screen.findByText('The prayer text has not been published yet.')).toBeInTheDocument()
+    expect(await screen.findByText('No prayer text is held for this devotion yet.')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'How to Pray' })).not.toBeInTheDocument()
     expect(requests.filter(r => r.path.startsWith('/devotions'))).toEqual([])          // never touches the API
   })

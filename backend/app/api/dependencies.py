@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -64,49 +63,6 @@ def ensure_user(db: Session, clerk_user_id: str, timezone: str) -> User:
         )
         user = db.scalar(statement)
     return user
-
-
-@dataclass(frozen=True)
-class Editorial:
-    """A verified Clerk user who holds an explicit editorial role. Roles come only from settings."""
-
-    clerk_user_id: str
-    is_editor: bool
-    is_approver: bool
-
-
-def get_editorial(request: Request) -> Editorial:
-    """The caller's editorial roles; 403 unless they hold at least one.
-
-    Being signed in grants nothing here. The roles are the verified Clerk ids listed in the
-    server's settings, and no endpoint can add to them.
-    """
-    clerk_user_id = require_authentication(request)
-    settings = request.app.state.settings
-    actor = Editorial(
-        clerk_user_id, clerk_user_id in settings.editor_clerk_user_ids,
-        clerk_user_id in settings.approver_clerk_user_ids,
-    )
-    if not (actor.is_editor or actor.is_approver):
-        raise HTTPException(403, "Editorial access required")
-    return actor
-
-
-def get_editor(actor: Annotated[Editorial, Depends(get_editorial)]) -> Editorial:
-    if not actor.is_editor:
-        raise HTTPException(403, "Editor role required")
-    return actor
-
-
-def get_approver(actor: Annotated[Editorial, Depends(get_editorial)]) -> Editorial:
-    if not actor.is_approver:
-        raise HTTPException(403, "Approver role required")
-    return actor
-
-
-AnyEditorial = Annotated[Editorial, Depends(get_editorial)]
-EditorOnly = Annotated[Editorial, Depends(get_editor)]
-ApproverOnly = Annotated[Editorial, Depends(get_approver)]
 
 
 def current_user_id(request: Request) -> UUID:

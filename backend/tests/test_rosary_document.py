@@ -9,17 +9,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import select
-from test_devotions import (  # noqa: F401
-    BASE,
-    approve_text,
-    approver,
-    editor,
-    make_devotion,
-    make_text,
-    publish,
-    reader,
-    roles,
-)
+from test_devotions import reader  # noqa: F401
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -58,6 +48,7 @@ def words(value):
 
 
 # ---- 1. Import accuracy, checked independently of the importer ---------------------------------------------------
+
 def test_all_ten_prayers_were_found_in_the_documents_order():
     assert [p["key"] for p in DATA["prayers"]] == KEYS
     assert [p["heading_in_file"] for p in DATA["prayers"]] == ["The Sign of the Cross", "The Apostles' Creed", "The Our Father", "The Hail Mary", "The Glory Be", "The Fatima Prayer", "The Hail Holy Queen", "The Closing Prayer", "St. Michael the Archangel Prayer", "Prayer to St. Joseph"]
@@ -114,6 +105,7 @@ def test_the_importer_refuses_a_document_it_cannot_slice_safely():
 
 
 # ---- 2. What seeding records ---------------------------------------------------------------------------------------
+
 def test_each_prayer_is_recorded_on_the_holy_rosary_with_its_provenance_unverified_and_unapproved(application, run):
     assert run("--execute")[0] == 0
     rows = collection_rows(application)
@@ -163,50 +155,28 @@ def test_a_different_edition_already_held_is_noted_for_the_reviewer_and_never_re
     assert "Another edition" not in collection_rows(application)[("collection-sign-of-the-cross", "la")].license_notes    # identical wording: nothing to flag
 
 
-def test_seeding_again_never_overwrites_a_collection_text_that_was_edited_or_approved(application, run, editor):
+# ---- 3. Review workflow and no public exposure -----------------------------------------------------------------------
+
+
+def test_seeding_again_never_overwrites_a_collection_text_that_was_edited(application, run):
     run("--execute")
-    brief = next(d for d in editor.get(BASE).json() if d["slug"] == "the-holy-rosary")
-    detail = editor.get(f"{BASE}/{brief['id']}").json()
-    target = next(t for t in detail["texts"] if t["slot"] == "collection-our-father" and t["language"] == "en")
-    assert editor.patch(f"{BASE}/{detail['id']}/texts/{target['id']}", json={"body": "A reviewer's own correction"}).status_code == 200
+    with application.state.session_factory.begin() as db:
+        row = db.scalar(select(PrayerText).where(PrayerText.slot == "collection-our-father", PrayerText.language == "en"))
+        row.body = "A reviewer's own correction"
     run("--execute", "--add-missing-texts")
     assert collection_rows(application)[("collection-our-father", "en")].body == "A reviewer's own correction"
 
 
-# ---- 3. Review workflow and no public exposure -----------------------------------------------------------------------
-def test_the_texts_are_in_the_review_queue_and_cannot_be_verified_until_their_source_and_rights_are_recorded(application, run, editor):
+def test_the_prayers_are_in_the_library_in_the_documents_order_with_their_source_and_no_approval_needed(application, run, reader):
     run("--execute")
-    brief = next(d for d in editor.get(BASE).json() if d["slug"] == "the-holy-rosary")
-    assert brief["status"] == "proposed"
-    detail = editor.get(f"{BASE}/{brief['id']}").json()
+    detail = reader.get("/api/devotions/the-holy-rosary").json()
     collection = [t for t in detail["texts"] if t["slot"].startswith(seed.COLLECTION_PREFIX)]
-    assert len(collection) == 20 and all(t["status"] == "proposed" and t["has_body"] and t["rights_cleared"] is False for t in collection)
-    refused = editor.post(f"{BASE}/{detail['id']}/texts/{collection[0]['id']}/transition", json={"to": "source_verified"})
-    assert refused.status_code == 409
-    assert any("Record whether the wording is public domain" in problem for problem in collection[0]["problems"])
-
-
-def test_no_imported_prayer_is_reachable_by_an_ordinary_reader(application, run, reader):
-    run("--execute")
-    assert reader.get("/api/devotions").json() == []
-    response = reader.get("/api/devotions/the-holy-rosary")
-    assert response.status_code == 404
-    for prayer in DATA["prayers"]:
-        assert prayer["latin"][:25] not in response.text and prayer["english"][:25] not in response.text
-    assert reader.get("/api/editorial/devotions").status_code == 403
-
-
-def test_a_published_devotion_never_shows_collection_texts_that_are_not_approved(application, editor, approver, reader):
-    devotion = make_devotion(editor, "filler-rosary")
-    approved = make_text(editor, devotion, slot="main", body="Approved filler wording")
-    approve_text(editor, approver, devotion, approved)
-    pending_en = make_text(editor, devotion, slot="collection-first", language="en", body="Unapproved English collection filler")
-    make_text(editor, devotion, slot="collection-first", language="la", body="Unapproved Latin collection filler")
-    publish(editor, approver, devotion)
-    page = reader.get("/api/devotions/filler-rosary")
-    assert page.status_code == 200 and [t["slot"] for t in page.json()["texts"]] == ["main"]
-    assert "collection filler" not in page.text
-    approve_text(editor, approver, devotion, pending_en)                                   # approving one language shows that language only
-    shown = [(t["slot"], t["language"]) for t in reader.get("/api/devotions/filler-rosary").json()["texts"]]
-    assert shown == [("main", "en"), ("collection-first", "en")] or sorted(shown) == sorted([("main", "en"), ("collection-first", "en")])
-    assert "Unapproved Latin collection filler" not in reader.get("/api/devotions/filler-rosary").text
+    assert len(collection) == 20
+    assert [(t["slot"].removeprefix(seed.COLLECTION_PREFIX), t["language"]) for t in collection] == [(k, language) for k in KEYS for language in ("en", "la")] or         sorted((t["slot"], t["language"]) for t in collection) == sorted((seed.COLLECTION_PREFIX + k, language) for k in KEYS for language in ("en", "la"))
+    for t in collection:
+        prayer = by_key[t["slot"].removeprefix(seed.COLLECTION_PREFIX)]
+        assert t["body"] == prayer["english" if t["language"] == "en" else "latin"] and t["has_wording"] is True      # exact wording
+        assert t["source"]["title"] == DATA["provenance"] and t["source"]["license_status"] == "unverified"             # provenance kept, rights not claimed
+    assert "license_notes" not in collection[0]
+    with application.state.session_factory() as db:
+        assert all(t.approved_by is None and t.source_verified_by is None for t in db.scalars(select(PrayerText)))      # nothing was approved to make this visible
