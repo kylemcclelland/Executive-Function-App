@@ -315,7 +315,7 @@ a.event-title:hover{text-decoration:underline;text-underline-offset:3px}
 .quick-task-title{font-size:13px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
 .quick-task-main small{font-size:11px;color:var(--ink-soft);overflow-wrap:anywhere}
 .quick-empty{margin-top:14px}
-.upcoming-card,.reading-card,.liturgy-card{padding:22px}
+.upcoming-card,.reading-card,.calendar-card{padding:22px}
 .upcoming-card .section-title,.reading-card .section-title{margin-bottom:6px}
 .upcoming-card .event-row{padding:10px 0;gap:12px}
 .upcoming-card .event-time{flex-basis:96px}
@@ -328,11 +328,22 @@ a.event-title:hover{text-decoration:underline;text-underline-offset:3px}
 .reading-list strong{font-family:var(--font-serif);font-weight:400;font-size:15px;line-height:1.35;overflow-wrap:anywhere}
 .reading-list small{font-size:11px;color:var(--ink-soft);overflow-wrap:anywhere}
 .reading-card .previous-footer{display:flex;gap:16px;flex-wrap:wrap}
-.liturgy-card{border-style:dashed;border-color:var(--gold-line);background:var(--gold-soft)}
-.liturgy-card .section-heading{margin-bottom:6px}
-.liturgy-card .section-title{margin-bottom:0}
-.liturgy-card .section-title svg{color:var(--gold-deep)}
-.liturgy-card .tag{background:transparent;border-color:var(--gold-line);color:var(--gold-deep)}
+.calendar-card{border-top:3px solid var(--gold);background:var(--paper)}
+.calendar-card .section-heading{margin-bottom:4px}
+.calendar-card .section-title{margin-bottom:0}
+.calendar-card .section-title svg{color:var(--gold-deep)}
+.calendar-card .eyebrow{margin:0;color:var(--gold-deep)}
+.calendar-date{margin:0 0 6px;font-size:13px;color:var(--ink-soft)}
+.calendar-celebration{margin:0;font-family:var(--font-serif);font-weight:400;font-size:clamp(22px,5vw,28px);line-height:1.25;color:var(--ink);overflow-wrap:anywhere}
+.calendar-rank{margin:6px 0 0;font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--green-deep)}
+.calendar-latin{margin:2px 0 0;font-family:var(--font-serif);font-style:italic;font-size:13px;color:var(--ink-soft);overflow-wrap:anywhere}
+.calendar-designation{margin:2px 0 0;font-size:13px;color:var(--ink-soft)}
+.calendar-season{margin:2px 0 0;font-size:12px;color:var(--ink-soft)}
+.calendar-description{margin:14px 0 0;max-width:62ch;font-family:var(--font-serif);font-size:16px;line-height:1.7;color:var(--ink)}
+.calendar-source{margin:6px 0 0;font-size:11px;color:var(--ink-soft)}
+.calendar-commemorations{margin:12px 0 0;font-size:13px;color:var(--ink-soft)}
+.calendar-commemorations span{font-weight:600;color:var(--gold-deep)}
+.calendar-link{display:inline-flex;align-items:center;gap:6px;min-height:44px;margin-top:10px;font-size:14px;font-weight:600;color:var(--green-deep);text-decoration:underline;text-underline-offset:3px}
 .liturgy-placeholder{display:grid;gap:8px;margin-top:14px;opacity:.55}
 .liturgy-placeholder span{height:8px;border-radius:4px;background:var(--gold-line)}
 .liturgy-placeholder span:nth-child(2){width:78%}.liturgy-placeholder span:nth-child(3){width:52%}

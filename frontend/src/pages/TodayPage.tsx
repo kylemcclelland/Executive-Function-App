@@ -8,7 +8,7 @@ import { Capture } from '../components/Capture'
 import { UpcomingEvents } from '../components/calendar/UpcomingEvents'
 import { TodayTasks } from '../components/today/TodayTasks'
 import { ReadingCard } from '../components/today/ReadingCard'
-import { LiturgyCard } from '../components/today/LiturgyCard'
+import { LiturgicalCalendarCard } from '../components/today/LiturgicalCalendarCard'
 import { TaskRow } from '../components/tasks/TaskRow'
 import { api } from '../services/api'
 import { useAction } from '../hooks/useAction'
@@ -34,6 +34,7 @@ export function TodayPage() {
   return <>
     <PageHeader eyebrow={data ? formatDate(data.date, { weekday: 'long', month: 'long', day: 'numeric' }) : 'Today'} title="Today" action={<span className="today-badge"><Sun size={14} /> <span lang="la">Unum est necessarium</span></span>}>{greeting(data?.timezone)}. Choose what matters, then give it your full attention.</PageHeader>
     <div className="today-layout"><div className="main-column">
+      <LiturgicalCalendarCard />
       <Card className="focus-card"><div className="section-heading"><div><p className="eyebrow">WHAT MATTERS TODAY</p><h2>Today’s Priorities <span className="count">{priorities.length} / 3</span></h2></div><span className="sun-illustration"><Sun size={34} strokeWidth={1.3} /></span></div>
         <p className="muted">Choose up to three. Everything else can wait.</p>
         {query.isPending ? <Loading /> : query.isError ? <><ErrorMessage message={query.error.message} /><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></> : <>
@@ -64,7 +65,7 @@ export function TodayPage() {
       </Card>}
       <Capture />
       {!!data?.completed_tasks.length && <details className="completed-section"><summary><Check size={16} /> Completed today ({data.completed_tasks.length})</summary><Card>{data.completed_tasks.map(task => <TaskRow key={task.id} task={task} />)}</Card></details>}
-    </div><aside className="day-aside"><UpcomingEvents timeZone={data?.timezone} /><ReadingCard /><LiturgyCard />
+    </div><aside className="day-aside"><UpcomingEvents timeZone={data?.timezone} /><ReadingCard />
       <Link to="/inbox" className="inbox-link"><span className="small-icon"><Inbox size={20} /></span><div><strong>Inbox</strong><p>{data ? `${data.inbox_count} unprocessed ${data.inbox_count === 1 ? 'thought' : 'thoughts'} in your inbox` : 'Your inbox is here when you’re ready'}</p></div><ChevronRight size={18} /></Link>
       {data && <p className="timezone-note">Your day follows {data.timezone.replaceAll('_', ' ')}.<br /><Link to="/settings">Change timezone</Link></p>}
       <Card className="encouragement"><span className="line-art"><Feather size={40} strokeWidth={1.1} /></span><p className="eyebrow">LUKE 10:42</p><h2 lang="la">Unum est<br />necessarium.</h2><p>One thing is necessary.<br />Give it your full attention.</p><span className="tiny-rule" /></Card>

@@ -104,6 +104,67 @@ A unit is offered only if the Latin and English cells have the same number of li
 
 **Applying the migration (not done).** The Saved list and saving need the table: `cd backend; alembic upgrade head` against the local database. Until then those endpoints answer 500 and the page shows "Saving prayers is not available on this server."; everything else is unaffected.
 
+## Traditional Liturgical Calendar card (Today dashboard)
+
+`GET /api/liturgical-calendar/{date}?edition=roman_1960` (signed-in users; only `roman_1960` is accepted) returns the principal celebration of a date from the same engine and
+version (`Rubrics 1960 - 1960`); the Today page shows it in a card above the priorities, with a link to that date's Divine Office. The date is the reader's **local** date (not UTC).
+
+**What comes from the engine** (`app/divine_office/calendar.py`, one `prayMatutinum` run per date, cached 400 dates in memory, plus the already cached Lauds for commemorations):
+the celebration's name and rank (the engine's own `setheadline`, "Name ~ III. classis", which the wrapper now also prints as `<!--DO-HEAD-->`), the winning office file
+(`Sancti/…`, `Tempora/…`, `Commune/…`), the English name of that office, the season code, and the commemorations (the rubric lines of Lauds). Nothing is calculated here.
+
+**Celebration types.** `saint` (a `Sancti` winner named "S./SS./B. …" that is not a feast of the Lord or Our Lady), `feast` (feasts of the Lord and Our Lady, dedications and other `Sancti` feasts),
+`sunday`, `feria` and `temporal` (vigils, octave days, Ascension, … from `Tempora`), and `other` (for example Our Lady on Saturday, a `Commune` winner). Not every day has a saint: ferias and Sundays are shown as such.
+Sundays and ferias show the engine's Latin name; the engine has no English name for them and none is invented.
+
+**Descriptions: coverage and sources.** A description is offered **only for a saint's feast**, and only when the engine's own English Matins gives that saint a biographical lesson: Reading 3 of a
+one-nocturn Office (the 1960 abridged legend), or Reading 4 of a three-nocturn Office, where the body follows the "Reading N" marker directly (a Scripture lesson or a sermon has a source line first).
+The description is the lesson's **own opening sentences, copied verbatim** (2 or 3 sentences, 35 to 65 words; a single whole sentence in that range is kept; otherwise none), after checking that the lesson names the saint
+(a word of the engine's English title appears in it), and refusing text carrying the engine's omission markup. Source recorded with each: "The Roman Breviary, Matins lesson (English), as supplied by Divinum Officium",
+with the reference "Matins, Reading N, <saint> (<file>)" and the note that translation rights are not verified. Not used: any language model, any other biography, month-and-day matching alone (identity is the engine's winning office
+plus the name check).
+
+Not covered (no description is shown, only name, rank, season, commemorations): Sundays, ferias, temporal feasts, feasts of the Lord and Our Lady (their Matins lessons are Scripture and homilies, not descriptions), and saints whose lesson does not
+qualify (for example most saints with nine lessons whose Reading 4 is a sermon). Alban Butler's *Lives of the Saints* was **not** used: I did not obtain a verified public-domain edition within the time limit. See the coverage figures in the project report.
+
+Known limits: the lesson is the Breviary's account, not an independent
+historical check; I did not verify the facts against another source.
+
+**English names (refinement).** The card shows an English name and keeps the Latin title beneath it (`celebration`, `celebration_latin`), with `celebration_source` saying where the English came from:
+
+* `upstream_english`: the engine's own English title (saints and feasts such as "St. Andrew Avellino", "Nativity of Our Lord Jesus Christ", "Assumption of the Blessed Virgin Mary"). A leading Latin abbreviation is normalised ("S. Agnes" becomes "St. Agnes").
+  Where the engine's English data holds only the Latin title for the 1960 version (8 December: the 1960 `[Rank]` variant exists in the Latin file alone), the wrapper falls back to the English file's own default `[Rank]` name, read as written ("Immaculate Conception of the Blessed Virgin Mary"); nothing is translated there.
+* `translated`: upstream's English files for Sundays, ferias, octave days and vigils carry the Latin title, so these are translated by fixed rules in `app/divine_office/names_en.py` (established liturgical terms: "Fifth Sunday after Epiphany",
+  "Wednesday of the Second Week of Lent", "Fourth Day within the Octave of Easter", "Vigil of the Ascension", "Ember Wednesday of September", "Holy Saturday", ...). A rule applies only if it matches the **whole** title; a title it does not match is not translated.
+  The rules cover 389 of the 391 temporal titles in the upstream data (a test reads them all; the other two are the Patronage titles below) and every title the engine produced for the 365 days of 2026.
+* `latin_untranslated`: no rule matched, so the Latin is kept and flagged. In the 2026 scan this never happens. Two titles would stay Latin by design: `In Octava Patrocinii S. Joseph` and `Patrocinii St. Joseph Confessoris Sponsi B.M.V. Confessoris`.
+  They belong to the Patronage of St. Joseph, whose upstream `[Rank]` has no 1960 entry (the feast was suppressed in 1955): under `Rubrics 1960 - 1960` the engine returns the ordinary Wednesday of those weeks instead (tested for 2025 to 2030), so the titles are not translated.
+
+
+The Breviary's month designation of Sundays and weeks from September to December ("Dominica V Post Epiphaniam **III. Novembris**") is kept as `designation` and always labelled **"(Breviary numbering)"**, e.g. "Third Sunday of November (Breviary numbering)" for a Sunday and "First Week of November (Breviary numbering)" for a weekday. It is **not a civil count**: upstream (`DivinumOfficium/Date.pm`, `monthday`) starts the liturgical month with the Sunday on or nearest the 1st and, for November, counts the weeks back from Advent with the II week omitted under the 1960 rubrics. 8 November 2026, the second Sunday of the civil month, is therefore "III. Novembris".
+
+**Saint names.** A qualifier ("Confessor", "Virgin and Martyr", "Bishop, Confessor and Doctor of the Church", "Apostles") is separated only when the boundary is unambiguous: after a comma, or after a name that does not end in "the", "of", "and" or an ordinal, and never "Martyr" without a comma (it can be a cognomen). Otherwise the whole title is kept as the name.
+"St. Peter the Martyr" (29 April) and "St. Matthias the Apostle" stay whole; "St. Stephen the First Martyr" becomes "St. Stephen, the First Martyr"; "Sts. Peter and Paul, Apostles" is split at its comma. Descriptions, their identity checks and their sources are unchanged.
+
+**One corrected upstream title.** 14 April (`Sancti/04-14.txt`) is titled `St. Justini Martyr` upstream (a Latin genitive in an English title). An exact-match rule (winner file and exact text, nothing broader) shows it as "St. Justin Martyr", keeps the Latin `S. Justini Martyris`, and records the change in `english_correction` (also shown as the heading's tooltip). A side effect: the identity check for the saint's description now matches (the lesson names Justin), so that day gained a description (112 of 137, from 111).
+
+**Validation status (2026) and test commands.**
+
+* Calendar: the engine's `Rubrics 1960 - 1960` (universal Roman calendar, not the 1960 "New Calendar" variant), upstream commit recorded in every response.
+* **Fast, deterministic (no engine)**: `pytest tests/test_liturgical_calendar.py -k "split or classify or rank or sentences or description or temporal_titles or exact_rules"` and the computus/Ember arithmetic in `tests/test_liturgical_calendar_year.py` (`pytest tests/test_liturgical_calendar_year.py -k "computus or ember_days_of_2026 or ember_wednesdays or ash_wednesday_and_the_days"`).
+* **Bounded engine checks (about 1 to 2 minutes)**: `pytest tests/test_liturgical_calendar.py tests/test_liturgical_calendar_year.py` (the exhaustive test is skipped by default). They cover representative dates, the Ember days of Lent, Pentecost, September and Advent, 23 Easter-based and fixed celebrations, the season boundaries, 14 April (St. Justin Martyr), the November designations and the Patronage-of-St.-Joseph exception.
+* **Optional exhaustive check (about 8 minutes, launches the Perl engine 365 times; do not run it routinely)**: `OPTIMA_FULL_YEAR=1 pytest tests/test_liturgical_calendar_year.py -k every_day`. Every assertion in it is collected, so one run reports everything.
+
+What the exhaustive test checks, kept apart: *faithful handling of the engine's output* (every day resolves, names well formed, Latin/rank/season/commemorations the engine's, saints-only verbatim descriptions, the exact set of saints without a description) and *independent arithmetic* (Easter-based and fixed feasts from the computus, Ember days, weekday words in ferias' titles, Sundays, season boundaries). It is **not** a comparison with a printed 1960 Breviary or Ordo, which has not been done.
+
+**What was actually verified.** One complete 365-day run reached its final stage (all hard assertions passed for every day: well-formed names, none left in Latin where a rule exists, the one exact correction, 137 saints, exactly 25 without a description and 112 with). Its soft checks were not reported (an earlier assertion stopped it first), and no snapshot was kept, so **the independent full-year checks (anchors, weekday words, Sundays, season boundaries) have not been confirmed across all 365 dates**; the targeted tests above confirm them on the dates that matter. Other runs were killed by an engine timeout (the machine slept) or never finished.
+
+**Ember days (1960).** Verified against the upstream engine, not assumed: Wednesday, Friday and Saturday after the first Sunday of Lent, after Pentecost, after the **third Sunday of September** (23, 25 and 26 September 2026; 16, 18 and 19 September, the pre-1960 "after 14 September" days, are ordinary saints' days) and after the **third Sunday of Advent** (16, 18, 19 December 2026). Upstream gets September from its month-week numbering (`DivinumOfficium/Date.pm`, `monthday`, which under the 1960 rubrics counts the first civil Sunday as the first of the month) and uses `Adv3`, `Quad1` and `Pasc7` for the others (`emberday`).
+
+**Season label fix.** Upstream's season code for Quinquagesima week runs through the Saturday after Ash Wednesday, so Ash Wednesday to Saturday had been labelled "Septuagesima". They are now labelled "Lent", decided by the engine's own titles (`Feria IV Cinerum`, `post Cineres`), not by any new calculation.
+
+**Remaining.** (1) The exhaustive independent checks above have not been completed over all 365 dates; a bounded way to finish them is to save the engine's answers once to a JSON snapshot (a script outside the test suite) and run the pure-arithmetic checks against that file. (2) Only 2026 has been examined. (3) Nothing was compared with a printed Breviary. (4) The two Patronage of St. Joseph titles stay Latin by design (never produced under 1960).
+
 ## Licensing and provenance findings
 
 * The repository's `LICENSE` and `README.md` state the **MIT licence** (Copyright (c) 2026 Divinum Officium) for the repository. The software may be used and

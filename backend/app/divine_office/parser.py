@@ -19,6 +19,7 @@ VERSE_NUMBER = re.compile(r"""\s*<FONT SIZE='1' COLOR="red">([^<]*)</FONT>(.*)""
 WHOLE_RUBRIC = re.compile(r"""\s*<FONT SIZE='1' COLOR="red">(.*)</FONT>\s*$""", re.S | re.I)
 TITLE = re.compile(r"<P ALIGN=CENTER><FONT >(.*?)</FONT></P>", re.S | re.I)
 META = re.compile(r"<!--DO-META\t(.*?)-->", re.S)
+HEAD = re.compile(r"<!--DO-HEAD\t(.*?)\t(.*?)-->", re.S)
 BREAK = re.compile(r"<br\s*/?>", re.I)
 TAG = re.compile(r"<[^>]+>")
 
@@ -100,6 +101,16 @@ def parse_meta(output: str) -> dict:
         elif part.strip():
             day.append(part.strip())
     return {"season_code": parts[0].strip(), "day": " ".join(day), **named}
+
+
+def parse_head(output: str) -> dict:
+    """The engine's headline ("Name ~ rank") and the English name of the winning office, when the wrapper supplied them."""
+    found = HEAD.search(output)
+    if not found:
+        return {}
+    headline, english = found.group(1).strip(), found.group(2).strip()
+    name, _, rank = headline.partition(" ~ ")
+    return {"headline": headline, "name_latin": name.strip(), "rank_text": rank.strip(), "name_english": english}
 
 
 def parse(output: str) -> Parsed:
