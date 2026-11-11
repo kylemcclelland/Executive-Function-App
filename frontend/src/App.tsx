@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Feather } from 'lucide-react'
 import { AppLayout } from './components/layout/AppLayout'
@@ -49,6 +49,7 @@ export function AppRoutes({ profile }: { profile?: ReactNode }) {
       <Route path="/editorial" element={<EditorialDashboardPage />} />
       <Route path="/devotions/:slug" element={<DevotionPage />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/preferences" element={<Navigate to="/settings" replace />} />
       <Route path="*" element={<FuturePage name="Page not found" icon={Feather} description="That page doesn’t exist. Head back to Today." />} />
     </Routes>
   </AppLayout>

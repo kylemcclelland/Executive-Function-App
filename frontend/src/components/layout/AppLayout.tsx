@@ -32,10 +32,10 @@ export function AppLayout({ children, profile }: { children: ReactNode; profile?
           <Icon size={19} strokeWidth={1.6} /><span>{label}</span>
         </NavLink>)}
         <EditorialNavLink />
+        <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.6} /><span>Preferences</span></NavLink>
       </nav>
       <div className="sidebar-bottom">
         <div className="sidebar-note"><span lang="la">Maria optimam partem elegit.<small>Luke 10:42</small></span><Feather size={22} strokeWidth={1.2} /></div>
-        <NavLink className="nav-link" to="/settings" aria-label="Preferences"><Settings2 size={18} /><span>Preferences</span></NavLink>
         {profile}
       </div>
     </aside>

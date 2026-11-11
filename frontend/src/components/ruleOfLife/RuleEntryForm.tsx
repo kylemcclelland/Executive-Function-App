@@ -6,6 +6,7 @@ import { api } from '../../services/api'
 import { useAction } from '../../hooks/useAction'
 import { isoDate } from '../../lib/divineOffice'
 import { WEEKDAY_NAMES, browserZone } from '../../lib/ruleOfLife'
+import { isValidZone, timezoneLabel } from '../../lib/timezones'
 import type { DevotionBrief } from '../../types/devotions'
 import type { RuleDraft, RuleEntry, RuleKind, RuleRecurrence } from '../../types/ruleOfLife'
 
@@ -23,6 +24,9 @@ export function RuleEntryForm({ entry, onClose }: { entry?: RuleEntry; onClose: 
   const [date, setDate] = useState(() => entry?.start_date ?? isoDate(new Date()))
   const [notify, setNotify] = useState(entry?.notify ?? false)
   const hours = useQuery({ queryKey: ['office-hours'], queryFn: () => api<HourInfo[]>('/divine-office/hours'), retry: false, enabled: !entry })
+  // New entries follow the timezone chosen in Preferences; an existing entry keeps the zone it was scheduled in.
+  const preferredZone = useQuery({ queryKey: ['user'], queryFn: () => api<{ timezone: string }>('/user'), retry: false, enabled: !entry }).data?.timezone
+  const zone = entry?.timezone ?? (preferredZone && isValidZone(preferredZone) ? preferredZone : browserZone())
   const devotions = useQuery({ queryKey: ['devotions'], queryFn: () => api<DevotionBrief[]>('/devotions'), retry: false, enabled: !entry })
   const matches = useMemo(() => {
     const words = search.trim().toLowerCase()
@@ -33,7 +37,7 @@ export function RuleEntryForm({ entry, onClose }: { entry?: RuleEntry; onClose: 
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    const schedule = { local_time: time, timezone: entry?.timezone ?? browserZone(), recurrence, weekdays: recurrence === 'weekly' ? weekdays : [], start_date: recurrence === 'once' ? date : entry?.start_date ?? null, notify }
+    const schedule = { local_time: time, timezone: zone, recurrence, weekdays: recurrence === 'weekly' ? weekdays : [], start_date: recurrence === 'once' ? date : entry?.start_date ?? null, notify }
     void action.run(() => entry ? api(`/rule-of-life/${entry.id}`, 'PATCH', schedule) : api('/rule-of-life', 'POST', { kind, ref, ...schedule } satisfies RuleDraft), onClose)
   }
 
@@ -67,7 +71,7 @@ export function RuleEntryForm({ entry, onClose }: { entry?: RuleEntry; onClose: 
         </div>
         <details className="rule-more"><summary>More options</summary>
           <label className="rule-notify"><input type="checkbox" checked={notify} onChange={event => setNotify(event.target.checked)} /> Remind me <small>(your preference is saved; notifications are not delivered yet)</small></label>
-          <p className="muted">Time zone: {entry?.timezone ?? browserZone()}</p>
+          <p className="muted">Time zone: {timezoneLabel(zone)}</p>
         </details>
       </fieldset>
       <ErrorMessage message={action.error} />

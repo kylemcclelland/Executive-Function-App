@@ -63,6 +63,7 @@ describe('the Editorial sidebar entry in the real layout', () => {
     const navigation = await screen.findByRole('navigation', { name: 'Main navigation' })
     const link = await within(navigation).findByRole('link', { name: /editorial/i })
     expect(link).toHaveAttribute('href', '/editorial')
+    expect(within(navigation).getByRole('link', { name: 'Preferences' })).toHaveAttribute('href', '/settings')
     await userEvent.click(link)
     expect(await screen.findByRole('heading', { level: 1, name: 'Editorial Dashboard' })).toBeInTheDocument()
   })
@@ -72,6 +73,9 @@ describe('the Editorial sidebar entry in the real layout', () => {
     await screen.findByRole('heading', { level: 1, name: 'The Oratory' })
     await waitFor(() => expect(requests.some(r => r.path === '/editorial/access')).toBe(true))
     expect(screen.queryByRole('link', { name: /editorial/i })).not.toBeInTheDocument()
+    const preferences = within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('link', { name: 'Preferences' })
+    await userEvent.click(preferences)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Preferences' })).toBeInTheDocument()
     expect(requests.filter(r => r.path.includes('editorial')).map(r => r.path)).toEqual(['/editorial/access'])
   })
 

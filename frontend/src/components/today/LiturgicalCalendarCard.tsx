@@ -7,15 +7,9 @@ import { longDate, today } from '../../lib/divineOffice'
 import { ROMCAL_SOURCE, currentRomanDay, sameSaint } from '../../lib/romcalCalendar'
 import { api } from '../../services/api'
 import type { CalendarDay } from '../../types/liturgicalCalendar'
+import { PROVIDERS, saveProvider, savedProvider, type CalendarProvider } from '../../lib/calendarProvider'
 
-export type CalendarProvider = 'traditional' | 'current'
-export const CALENDAR_PROVIDER_KEY = 'optima.calendar-provider'
-const PROVIDERS: { key: CalendarProvider; label: string }[] = [{ key: 'traditional', label: 'Traditional (1960)' }, { key: 'current', label: 'Current Roman' }]
-
-/** The saved choice; the traditional calendar unless the reader chose the current one. */
-function savedProvider(): CalendarProvider {
-  try { return window.localStorage.getItem(CALENDAR_PROVIDER_KEY) === 'current' ? 'current' : 'traditional' } catch { return 'traditional' }
-}
+export { CALENDAR_PROVIDER_KEY } from '../../lib/calendarProvider'
 
 /**
  * The principal celebration of today in the reader's chosen calendar: the traditional 1960 Roman calendar (Divinum Officium) or the current Roman
@@ -26,7 +20,7 @@ export function LiturgicalCalendarCard() {
   const [provider, setProviderState] = useState<CalendarProvider>(savedProvider)
   const setProvider = (next: CalendarProvider) => {
     setProviderState(next)
-    try { window.localStorage.setItem(CALENDAR_PROVIDER_KEY, next) } catch { /* the choice just is not remembered */ }
+    saveProvider(next)
   }
   const current = provider === 'current'
   const traditional = useQuery({

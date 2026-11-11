@@ -401,17 +401,52 @@ describe('Preferences, dates, and resilient navigation', () => {
     expect(formatDate('2026-11-06')).toContain('6')
     expect(formatDate(null)).toBe('')
   })
-  it('updates timezone and validates invalid timezones accessibly', async () => {
+  it('shows the saved timezone by its friendly name and saves the IANA identifier', async () => {
     const user = setup('/settings')
-    const input = await screen.findByRole('combobox', { name: 'IANA timezone' })
-    await user.clear(input); await user.type(input, 'Definitely/Invalid')
+    const select = await screen.findByRole('combobox', { name: 'Time Zone' })
+    expect(within(select).getByRole('option', { selected: true })).toHaveTextContent('Eastern Time (US & Canada)')
+    expect(within(select).queryByText('America/New_York')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save timezone' })).toBeDisabled()
+    await user.selectOptions(select, 'Tokyo')
     await user.click(screen.getByRole('button', { name: 'Save timezone' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('valid IANA timezone')
-    expect(writes()).toHaveLength(0)
-    await user.clear(input); await user.type(input, 'Asia/Tokyo')
-    await user.click(screen.getByRole('button', { name: 'Save timezone' }))
-    await screen.findByText('Timezone saved.')
+    await screen.findByText('Timezone saved: Tokyo.')
     expect(timezone).toBe('Asia/Tokyo')
+    expect(writes()).toEqual([{ url: '/user', method: 'PATCH', body: { timezone: 'Asia/Tokyo' } }])
+  })
+  it('treats the server default UTC as the listed UTC option', async () => {
+    timezone = 'UTC'
+    setup('/settings')
+    const select = await screen.findByRole('combobox', { name: 'Time Zone' })
+    expect(within(select).getByRole('option', { selected: true })).toHaveTextContent('Coordinated Universal Time (UTC)')
+    expect(writes()).toHaveLength(0)
+  })
+  it('keeps a saved timezone that is not in the list, with a readable label', async () => {
+    timezone = 'Asia/Kolkata'
+    setup('/settings')
+    const select = await screen.findByRole('combobox', { name: 'Time Zone' })
+    expect(select).toHaveValue('Asia/Kolkata')
+    expect(within(select).getByRole('option', { selected: true }).textContent).toMatch(/Kolkata/)
+    expect(within(select).getByRole('option', { selected: true }).textContent).not.toBe('Asia/Kolkata')
+    expect(writes()).toHaveLength(0)
+  })
+  it('reports a failed save without claiming success, and keeps the saved timezone', async () => {
+    const user = setup('/settings')
+    const select = await screen.findByRole('combobox', { name: 'Time Zone' })
+    failPath = '/user'
+    await user.selectOptions(select, 'London')
+    await user.click(screen.getByRole('button', { name: 'Save timezone' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Eastern Time (US & Canada) is still in effect')
+    expect(screen.queryByText(/Timezone saved/)).not.toBeInTheDocument()
+    expect(timezone).toBe('America/New_York')
+    failPath = ''
+    await user.click(screen.getByRole('button', { name: 'Save timezone' }))
+    await screen.findByText('Timezone saved: London.')
+    expect(timezone).toBe('Europe/London')
+  })
+  it('shows the timezone on Today by name, without a change link', async () => {
+    setup('/')
+    expect(await screen.findByText('Your day follows Eastern Time (US & Canada).')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Change timezone' })).not.toBeInTheDocument()
   })
   it('gracefully explains unavailable timezone support', async () => {
     userUnsupported = true

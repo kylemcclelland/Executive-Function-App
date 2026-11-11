@@ -435,3 +435,17 @@ h1{letter-spacing:.005em;line-height:1.2}.brand-name{font-weight:700;letter-spac
 .editorial-sources{margin:6px 0;padding-left:18px}
 .editorial-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 8px}
 .editorial-detail h3{font-family:var(--font-display);color:var(--green-deep);font-size:1rem;margin:16px 0 4px}
+
+/* Sidebar: navigation labels in Almendra (restrained display face), and the desktop sidebar scrolls rather than clipping its lower links. */
+@media(min-width:651px){.sidebar{overflow-y:auto;overscroll-behavior:contain}}
+.sidebar nav .nav-link{font-family:var(--font-display);font-size:15px;line-height:1.25;letter-spacing:.01em}
+.sidebar nav .nav-link.active{font-weight:700}
+@media(max-width:650px){.sidebar nav .nav-link{font-size:13px}}
+
+/* Preferences: Calendar & Time */
+.calendar-time-card select.input{cursor:pointer}
+.calendar-time-card #timezone-hint{margin:-10px 0 14px}
+.timezone-device{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-bottom:14px}
+.theme-choice.calendar-choice{margin:28px 0 0;border-top:1px solid var(--line-strong);padding-top:20px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.calendar-choice legend{font-weight:600;font-size:15px;color:var(--ink);padding:20px 0 0}
+.calendar-choice>p{grid-column:1/-1}
