@@ -56,14 +56,20 @@ def has_body(text: PrayerText) -> bool:
 
 
 # ---- What the library shows --------------------------------------------------------------------
+def library_visible(devotion: Devotion) -> bool:
+    """Readers see the owner's own seeded library as before; a research-imported draft stays
+    hidden everywhere until the owner publishes it (and hides again if an edit resets approval)."""
+    return devotion.prose_origin != "research_import" or devotion.status == "published"
+
+
 def library_devotions(db: Session) -> list[Devotion]:
-    return list(db.scalars(select(Devotion).order_by(Devotion.title)))
+    return [d for d in db.scalars(select(Devotion).order_by(Devotion.title)) if library_visible(d)]
 
 
 def library_devotion(db: Session, slug: str) -> Devotion:
     devotion = db.scalar(select(Devotion).where(Devotion.slug == slug))
-    if devotion is None:
-        raise HTTPException(404, "Devotion not found")
+    if devotion is None or not library_visible(devotion):
+        raise HTTPException(404, "Devotion not found")  # same answer for "hidden" and "missing"
     return devotion
 
 

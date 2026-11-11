@@ -10,7 +10,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
-    proxy: { '/api': 'http://127.0.0.1:8000' },
+    // The Optima Pars backend (uvicorn runs on 8001 locally). Override with VITE_API_PROXY_TARGET
+    // if the backend runs elsewhere; do NOT point this at another project's server on 8000.
+    proxy: { '/api': process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8001' },
   },
   test: { environment: 'jsdom', setupFiles: './src/test/setup.ts', css: true },
 })

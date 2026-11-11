@@ -136,10 +136,11 @@ def test_bookmarking_a_devotion_that_does_not_exist_is_a_404(reader):
     assert reader.put("/api/devotions/nothing-here/bookmark").status_code == 404
 
 
-# ---- The editorial workflow is retired --------------------------------------------------------------------------
+# ---- The broad editorial workflow is retired; what exists now is the owner-only dashboard ------------------------
 @pytest.mark.parametrize("path", ["/api/editorial/devotions", "/api/editorial-access", "/api/editorial/devotions/00000000-0000-0000-0000-000000000000/preview"])
-def test_the_editorial_endpoints_are_gone_even_for_a_former_editor(application, path):
-    assert as_(application, "user_editor").get(path).status_code == 404
+def test_editorial_paths_are_closed_to_a_former_editor(application, path):
+    """The old editor role grants nothing: editorial paths answer 403 (owner-only), 404 or 405 — never content."""
+    assert as_(application, "user_editor").get(path).status_code in (403, 404, 405)
 
 
 def test_no_editor_or_approver_setting_is_needed_or_read():

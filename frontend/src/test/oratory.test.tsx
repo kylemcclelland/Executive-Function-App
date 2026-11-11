@@ -33,6 +33,7 @@ function stub(list: DevotionBrief[] | (() => Response | Promise<Response>)) {
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: RequestInit) => {
     const path = input.replace('/api', '')
     requests.push({ path, method: options?.method ?? 'GET' })
+    if (path.startsWith('/editorial')) return json({ detail: 'Editorial access is restricted to the owner' }, 403)
     if (path === '/devotions') return respond()
     const slug = path.replace('/devotions/', '')
     return json({ ...brief(slug, `Filler ${slug}`), overview: 'Overview filler', background: null, significance: null, references: [], instructions: [], steps: [], texts: [] })
@@ -426,12 +427,14 @@ describe('the Divine Office entrance', () => {
   })
 })
 
-describe('no editorial entrance', () => {
-  it('shows no editorial link and never asks the server about editorial roles', async () => {
+describe('no editorial entrance for ordinary readers', () => {
+  it('shows no editorial link to a non-owner and never fetches draft data', async () => {
     stub(library())
     open()
     await screen.findByRole('region', { name: 'All devotions' })
+    await waitFor(() => expect(requests.some(request => request.path === '/editorial/access')).toBe(true))
     expect(screen.queryByRole('link', { name: /editorial/i })).not.toBeInTheDocument()
-    expect(requests.some(request => request.path.includes('editorial'))).toBe(false)
+    // The server refused the light access probe (403); nothing editorial beyond it was requested.
+    expect(requests.filter(request => request.path.includes('editorial')).map(request => request.path)).toEqual(['/editorial/access'])
   })
 })

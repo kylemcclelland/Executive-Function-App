@@ -4,6 +4,7 @@ import { Bell, BellOff, HandHeart, Pause, Pencil, Play, Plus, Trash2 } from 'luc
 import { Button, Card } from '../components/ui'
 import { ConfirmDelete, Empty, ErrorMessage, Loading, PageHeader } from '../components/common'
 import { RuleEntryForm } from '../components/ruleOfLife/RuleEntryForm'
+import { NotificationSettings } from '../components/ruleOfLife/NotificationSettings'
 import { api } from '../services/api'
 import { useAction } from '../hooks/useAction'
 import { clockLabel, describeRecurrence, entryLink, kindLabel, useMarkOccurrence, useRuleEntries, useRuleOccurrences } from '../lib/ruleOfLife'
@@ -51,6 +52,7 @@ export function RuleOfLifePage() {
           })}
         </ul><ErrorMessage message={pause.error} />
         <p className="muted rule-note"><HandHeart size={13} aria-hidden="true" /> Marking a prayer completed or skipped is only for you: there are no streaks or scores.</p></Card>}
+    <NotificationSettings />
     {adding && <RuleEntryForm onClose={() => setAdding(false)} />}
     {editing && <RuleEntryForm entry={editing} onClose={closeEdit} />}
     {removing && <ConfirmDelete title={removing.title} onDelete={() => api(`/rule-of-life/${removing.id}`, 'DELETE')} onClose={() => setRemoving(null)} />}
