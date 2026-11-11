@@ -182,7 +182,8 @@ describe('Today', () => {
   })
 
   it('works unchanged if the calendar service errors', async () => {
-    vi.mocked(fetch).mockImplementationOnce(async () => json({ detail: 'boom' }, 500))
+    const working = vi.mocked(fetch).getMockImplementation()!                       // only the calendar status fails, whichever request the page makes first
+    vi.mocked(fetch).mockImplementation(async (input, options) => String(input).endsWith('/integrations/google-calendar/status') ? json({ detail: 'boom' }, 500) : working(input, options))
     setup('/')
     await screen.findByText('Choose your priorities')
     expect(screen.queryByText('Coming up')).not.toBeInTheDocument()

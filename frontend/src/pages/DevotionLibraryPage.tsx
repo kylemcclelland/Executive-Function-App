@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Bookmark, Cross, Search, X } from 'lucide-react'
+import { BookOpen, Bookmark, Cross, ScrollText, Search, X } from 'lucide-react'
 import { Button, Input } from '../components/ui'
 import { Empty, ErrorMessage, Loading } from '../components/common'
 import { DevotionCard } from '../components/devotions/DevotionCard'
@@ -56,6 +56,7 @@ export function DevotionLibraryPage() {
     <p className="oratory-subtitle">Bring what weighs on your heart to God.</p>
     <span className="oratory-rule" aria-hidden="true"><Cross size={15} strokeWidth={1.5} /></span>
     <Link className="oratory-office-link" to="/divine-office"><BookOpen size={15} aria-hidden="true" />The Divine Office</Link>
+    <Link className="oratory-office-link" to="/rule-of-life"><ScrollText size={15} aria-hidden="true" />Rule of Life</Link>
   </section>
 
   if (query.isPending) return <div className="oratory">{hero}<Loading /></div>

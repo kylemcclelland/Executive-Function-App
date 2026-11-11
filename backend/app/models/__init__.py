@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -584,3 +584,47 @@ class SavedOfficeUnit(Base):
     content: Mapped[dict] = mapped_column(JSON)
     source: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+class RuleOfLifeEntry(Timestamps, Base):
+    """One prayer in a user's Rule of Life: a stable reference to a prayer plus its recurrence.
+
+    No prayer text is stored. ``kind``/``ref`` name the prayer: a saved Divine Office prayer
+    (its id), a whole Office hour (its slug, resolved for each occurrence's own date) or a
+    library devotion such as the Rosary (its slug). ``fingerprint`` makes an accidental
+    duplicate impossible while distinct times stay allowed.
+    """
+
+    __tablename__ = "rule_of_life_entries"
+    __table_args__ = (
+        UniqueConstraint("user_id", "fingerprint", name="uq_rule_entry_fingerprint"),
+        Index("ix_rule_entry_user", "user_id", "local_time"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20))
+    ref: Mapped[str] = mapped_column(String(120))
+    title: Mapped[str] = mapped_column(String(300))
+    local_time: Mapped[time] = mapped_column()
+    timezone: Mapped[str] = mapped_column(String(100))
+    recurrence: Mapped[str] = mapped_column(String(10))
+    weekdays: Mapped[list] = mapped_column(JSON, default=list)
+    start_date: Mapped[date] = mapped_column()
+    notify: Mapped[bool] = mapped_column(default=False)
+    active: Mapped[bool] = mapped_column(default=True)
+    fingerprint: Mapped[str] = mapped_column(String(300))
+
+
+class RuleOfLifeOccurrence(Base):
+    """An occurrence marked completed or skipped: one row per entry and local date."""
+
+    __tablename__ = "rule_of_life_occurrences"
+    __table_args__ = (UniqueConstraint("entry_id", "occurrence_date", name="uq_rule_occurrence"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    entry_id: Mapped[UUID] = mapped_column(
+        ForeignKey("rule_of_life_entries.id", ondelete="CASCADE"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    occurrence_date: Mapped[date] = mapped_column()
+    status: Mapped[str] = mapped_column(String(10))
+    marked_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

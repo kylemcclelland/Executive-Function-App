@@ -57,3 +57,5 @@
 
 /* A quiet way in for editors and approvers only; nobody else is shown it. */
 .oratory-office-link { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; margin-top: 8px; font-size: 14px; color: var(--green-deep); text-decoration: underline; text-underline-offset: 3px; }
+
+.oratory-office-link + .oratory-office-link { margin-left: 18px; }
