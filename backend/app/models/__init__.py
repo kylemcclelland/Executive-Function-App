@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -411,7 +411,10 @@ class DailyPriority(Base):
 
 DEVOTION_STATUSES = ("proposed", "source_verified", "pending_approval", "approved", "published")
 PRAYER_TEXT_STATUSES = DEVOTION_STATUSES[:4]  # a text is approved; only a devotion is published
-LICENSE_STATUSES = ("unverified", "public_domain", "licensed", "permission_granted")
+# "restricted": the owner's terms do not clearly permit republishing, so the wording is withheld and
+# only the citation and link are kept. "unverified": nobody has checked yet.
+# Neither can be verified.
+LICENSE_STATUSES = ("unverified", "restricted", "public_domain", "licensed", "permission_granted")
 
 
 class Devotion(Timestamps, Base):
@@ -451,6 +454,10 @@ class Devotion(Timestamps, Base):
     references: Mapped[list[dict]] = mapped_column(JSON, default=list)
     instructions: Mapped[list[str]] = mapped_column(JSON, default=list)
     steps: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    # Names the choice when steps are grouped (for the Rosary: "Mysteries"); NULL when they are not.
+    choice_label: Mapped[str | None] = mapped_column(String(60))
+    # Where the explanatory prose came from, e.g. "ai_draft": shown as unapproved until approved.
+    prose_origin: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(20), default="proposed")
     created_by: Mapped[str] = mapped_column(String(255))
     source_verified_by: Mapped[str | None] = mapped_column(String(255))
@@ -479,12 +486,14 @@ class PrayerText(Timestamps, Base):
         CheckConstraint(
             f"license_status IN ({_in_list(LICENSE_STATUSES)})", name="prayer_text_license",
         ),
-        CheckConstraint("length(trim(body)) > 0", name="prayer_text_body"),
-        # Nothing moves past "proposed" without a cited source, attribution and a known licence.
+        # Wording may be absent only while a text is a proposal (citation kept, wording withheld).
+        CheckConstraint("status = 'proposed' OR length(trim(body)) > 0", name="prayer_text_body"),
+        # Nothing moves past "proposed" without a cited source, attribution and cleared rights.
         CheckConstraint(
             "status = 'proposed' OR (source_title IS NOT NULL AND attribution IS NOT NULL "
-            "AND license_status <> 'unverified' AND source_verified_by IS NOT NULL "
-            "AND source_verified_at IS NOT NULL)", name="prayer_text_source_recorded",
+            "AND license_status NOT IN ('unverified','restricted') "
+            "AND source_verified_by IS NOT NULL AND source_verified_at IS NOT NULL)",
+            name="prayer_text_source_recorded",
         ),
         CheckConstraint(
             "status <> 'approved' OR (approved_by IS NOT NULL AND approved_at IS NOT NULL "
@@ -503,8 +512,13 @@ class PrayerText(Timestamps, Base):
     is_translation: Mapped[bool] = mapped_column(default=False)
     translator: Mapped[str | None] = mapped_column(String(300))
     source_title: Mapped[str | None] = mapped_column(String(500))
+    # The issuing authority or author, the edition, and its publication date, exactly as known.
+    source_authority: Mapped[str | None] = mapped_column(String(500))
     source_edition: Mapped[str | None] = mapped_column(String(300))
+    source_date: Mapped[str | None] = mapped_column(String(100))
     source_url: Mapped[str | None] = mapped_column(String(2000))
+    # When the wording was copied from the source (evidence for a reviewer).
+    source_retrieved_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     attribution: Mapped[str | None] = mapped_column(String(1000))
     license_status: Mapped[str] = mapped_column(String(20), default="unverified")
     license_notes: Mapped[str | None] = mapped_column(Text)
@@ -542,3 +556,75 @@ class DevotionBookmark(Base):
     devotion_id: Mapped[UUID] = mapped_column(
         ForeignKey("devotions.id", ondelete="CASCADE"), primary_key=True,
     )
+
+
+class SavedOfficeUnit(Base):
+    """A prayer one user saved from the Divine Office: a server-verified snapshot with provenance.
+
+    The server copies the text from the Divinum Officium engine when saving (never from the client),
+    so it reopens unchanged whatever upstream later does. ``unit_key`` identifies the selection: a
+    content hash for fixed prayers (psalms, canticles, hymns), plus the date and hour for an
+    antiphon, which belongs to its day.
+    """
+
+    __tablename__ = "saved_office_units"
+    __table_args__ = (
+        UniqueConstraint("user_id", "unit_key", name="uq_saved_office_user_unit"),
+        Index("ix_saved_office_user", "user_id", "created_at"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    unit_key: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(20))
+    title_latin: Mapped[str] = mapped_column(String(300))
+    title_english: Mapped[str | None] = mapped_column(String(300))
+    date_specific: Mapped[bool] = mapped_column(default=False)
+    source_hour: Mapped[str] = mapped_column(String(20))
+    source_date: Mapped[date] = mapped_column()
+    content: Mapped[dict] = mapped_column(JSON)
+    source: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+class RuleOfLifeEntry(Timestamps, Base):
+    """One prayer in a user's Rule of Life: a stable reference to a prayer plus its recurrence.
+
+    No prayer text is stored. ``kind``/``ref`` name the prayer: a saved Divine Office prayer
+    (its id), a whole Office hour (its slug, resolved for each occurrence's own date) or a
+    library devotion such as the Rosary (its slug). ``fingerprint`` makes an accidental
+    duplicate impossible while distinct times stay allowed.
+    """
+
+    __tablename__ = "rule_of_life_entries"
+    __table_args__ = (
+        UniqueConstraint("user_id", "fingerprint", name="uq_rule_entry_fingerprint"),
+        Index("ix_rule_entry_user", "user_id", "local_time"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20))
+    ref: Mapped[str] = mapped_column(String(120))
+    title: Mapped[str] = mapped_column(String(300))
+    local_time: Mapped[time] = mapped_column()
+    timezone: Mapped[str] = mapped_column(String(100))
+    recurrence: Mapped[str] = mapped_column(String(10))
+    weekdays: Mapped[list] = mapped_column(JSON, default=list)
+    start_date: Mapped[date] = mapped_column()
+    notify: Mapped[bool] = mapped_column(default=False)
+    active: Mapped[bool] = mapped_column(default=True)
+    fingerprint: Mapped[str] = mapped_column(String(300))
+
+
+class RuleOfLifeOccurrence(Base):
+    """An occurrence marked completed or skipped: one row per entry and local date."""
+
+    __tablename__ = "rule_of_life_occurrences"
+    __table_args__ = (UniqueConstraint("entry_id", "occurrence_date", name="uq_rule_occurrence"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    entry_id: Mapped[UUID] = mapped_column(
+        ForeignKey("rule_of_life_entries.id", ondelete="CASCADE"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    occurrence_date: Mapped[date] = mapped_column()
+    status: Mapped[str] = mapped_column(String(10))
+    marked_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

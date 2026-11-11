@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { AppRoutes } from '../App'
 import { DevotionView } from '../components/devotions/DevotionView'
-import { LANGUAGE_KEY, SIZE_KEY, isResponseLine, resolveLanguage, safeUrl } from '../lib/devotions'
+import { LANGUAGE_KEY, SIZE_KEY, isResponseLine, safeUrl } from '../lib/devotions'
 import { PLACEHOLDER_KINDS, placeholderDevotion } from '../lib/devotionPlaceholders'
 import type { Devotion, PrayerText } from '../types/devotions'
 import css from '../components/devotions/devotions.css?raw'
@@ -29,7 +29,7 @@ describe('simple devotion layout', () => {
     expect(screen.getByText('Subtitle will appear here')).toBeInTheDocument()
     expect(screen.getByText('Category')).toBeInTheDocument()
     expect(screen.getByText('About 10 minutes')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Devotions/ })).toHaveAttribute('href', '/devotions')
+    expect(screen.getByRole('link', { name: /The Oratory/ })).toHaveAttribute('href', '/devotions')
     for (const name of ['Overview', 'How to Pray', 'Prayer Text']) expect(heading(name)).toBeInTheDocument()
     expect(screen.getByText('Historical background')).toBeInTheDocument()
     expect(screen.getByText('Spiritual significance')).toBeInTheDocument()
@@ -90,7 +90,7 @@ describe('missing optional sections', () => {
     expect(heading('How to Pray')).not.toBeInTheDocument()
     for (const hidden of ['Historical background', 'Spiritual significance', 'Sources', 'About 10 minutes', 'Category', 'Subtitle will appear here']) expect(screen.queryByText(hidden)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Save|Saved/ })).not.toBeInTheDocument()   // no bookmark handler, no button
-    expect(screen.getByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(screen.getByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
     expect(screen.queryByRole('button', { name: 'Enter prayer mode' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument()
   })
@@ -103,53 +103,6 @@ describe('missing optional sections', () => {
     const howTo = screen.getByRole('region', { name: 'How to Pray' })
     expect(within(howTo).getByText('The sequence')).toBeInTheDocument()
     expect(howTo.querySelectorAll('.instruction-list')).toHaveLength(0)
-  })
-})
-
-describe('Latin and English', () => {
-  const bilingual = () => placeholderDevotion('bilingual')
-  const shown = () => [...document.querySelectorAll<HTMLElement>('.prayer-body')].map(el => [el.getAttribute('lang'), el.textContent])
-
-  it('offers the languages that exist, showing English first and one language at a time', async () => {
-    view(bilingual())
-    const toggle = screen.getByRole('group', { name: 'Language' })
-    expect(within(toggle).getAllByRole('button').map(b => b.textContent)).toEqual(['Latin', 'English', 'Both'])
-    expect(within(toggle).getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true')
-    expect(shown().map(([lang]) => lang)).toEqual(['en'])
-    await userEvent.click(within(toggle).getByRole('button', { name: 'Latin' }))
-    expect(shown().map(([lang]) => lang)).toEqual(['la'])
-    expect(shown()[0][1]).toContain('Verified Latin text will appear here.')
-    expect(window.localStorage.getItem(LANGUAGE_KEY)).toBe('la')
-  })
-
-  it('shows both side by side with Latin first, each marked with its language', async () => {
-    view(bilingual())
-    await userEvent.click(screen.getByRole('button', { name: 'Both' }))
-    expect(shown().map(([lang]) => lang)).toEqual(['la', 'en'])
-    expect(document.querySelector('.prayer-versions')).toHaveClass('is-parallel')
-    expect(screen.getAllByText(/^(Latin|English)$/, { selector: '.prayer-language' })).toHaveLength(2)
-  })
-
-  it('says so, and falls back, when one text lacks the chosen language', () => {
-    window.localStorage.setItem(LANGUAGE_KEY, 'la')
-    view({ ...placeholderDevotion('simple'), texts: [text('one', 'en', 'English one'), text('one', 'la', 'Latin one'), text('two', 'en', 'English two')] })
-    expect(screen.getAllByText('No Latin version of this text has been published yet.')).toHaveLength(1)
-    expect(shown()).toEqual([['la', 'Latin one'], ['en', 'English two']])        // the Latin where it exists, the English otherwise
-  })
-
-  it('offers no toggle, and no note, when only one language exists at all', () => {
-    window.localStorage.setItem(LANGUAGE_KEY, 'la')
-    view(placeholderDevotion('simple'))
-    expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/No Latin version/)).not.toBeInTheDocument()
-    expect(shown().map(([lang]) => lang)).toEqual(['en'])
-  })
-
-  it('resolves a preference against what is available', () => {
-    expect(resolveLanguage('la', ['en'])).toBe('en')
-    expect(resolveLanguage('both', ['en'])).toBe('en')
-    expect(resolveLanguage('both', ['la', 'en'])).toBe('both')
-    expect(resolveLanguage('fr', ['la'])).toBe('la')
   })
 })
 
@@ -276,12 +229,12 @@ describe('prayer mode', () => {
     const dialog = await open(placeholderDevotion('sequence'))
     for (let i = 0; i < 4; i++) await userEvent.click(within(dialog).getByRole('button', { name: /Next/ }))
     expect(within(dialog).getByText('Step 5 of 5')).toBeInTheDocument()
-    expect(within(dialog).getByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(within(dialog).getByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
   })
 
   it('follows the language and size choices made in the dialog', async () => {
     const dialog = await open(placeholderDevotion('bilingual'))
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Latin' }))
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Language' }), 'la')
     expect(dialog.querySelector('.prayer-body')).toHaveAttribute('lang', 'la')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Larger text' }))
     expect(dialog).toHaveAttribute('data-size', 'large')
@@ -335,49 +288,6 @@ function app(path: string) {
   return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[path]}><AppRoutes /></MemoryRouter></QueryClientProvider>)
 }
 
-describe('devotional library', () => {
-  it('has a place in the main navigation', () => {
-    stubApi([])
-    app('/devotions')
-    expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('link', { name: 'Devotions' })).toHaveAttribute('href', '/devotions')
-  })
-
-  it('welcomes the reader with an empty state, not an error, when nothing is published yet', async () => {
-    stubApi([])
-    app('/devotions')
-    expect(await screen.findByText('No devotions have been added yet')).toBeInTheDocument()
-    expect(screen.getByText(/This library will grow as prayers are carefully sourced and approved\./)).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'See how a devotion page will look' })).toHaveAttribute('href', '/devotions/preview')
-  })
-
-  it('reports a missing devotions route as a real error and never as an empty library', async () => {
-    stubApi([])
-    vi.stubGlobal('fetch', vi.fn(async () => json({ detail: 'Not Found' }, 404)))     // a server that predates devotions
-    app('/devotions')
-    expect(await screen.findByRole('alert')).toHaveTextContent('The Devotions service isn’t available on this server yet (404 Not Found)')
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
-  })
-
-  it('shows other server failures as errors too, with their own message', async () => {
-    stubApi([])
-    vi.stubGlobal('fetch', vi.fn(async () => json({ detail: 'Database unavailable' }, 503)))
-    app('/devotions')
-    expect(await screen.findByRole('alert')).toHaveTextContent('Database unavailable')
-    expect(screen.queryByText('No devotions have been added yet')).not.toBeInTheDocument()
-  })
-
-  it('lists published devotions with a link to each', async () => {
-    stubApi([{ ...published, bookmarked: true }])
-    app('/devotions')
-    const link = await screen.findByRole('link', { name: /Prayer Title/ })
-    expect(link).toHaveAttribute('href', '/devotions/test-devotion')
-    expect(within(link).getByLabelText('Saved')).toBeInTheDocument()
-  })
-})
-
 describe('devotion page', () => {
   it('renders a published devotion from the API and toggles its bookmark', async () => {
     stubApi([structuredClone(published)])
@@ -393,7 +303,7 @@ describe('devotion page', () => {
   it('shows the unpublished placeholder when the server sends no approved text', async () => {
     stubApi([{ ...published, texts: [], has_text: false }])
     app('/devotions/test-devotion')
-    expect(await screen.findByRole('note')).toHaveTextContent('The prayer text has not been published yet.')
+    expect(await screen.findByRole('note')).toHaveTextContent('No prayer text is held for this devotion yet.')
     expect(screen.queryByRole('button', { name: 'Enter prayer mode' })).not.toBeInTheDocument()
   })
 
@@ -401,7 +311,7 @@ describe('devotion page', () => {
     stubApi([])
     app('/devotions/draft')
     expect(await screen.findByText('This devotion isn’t available')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Devotions' })).toHaveAttribute('href', '/devotions')
+    expect(screen.getByRole('link', { name: 'Back to The Oratory' })).toHaveAttribute('href', '/devotions')
   })
 })
 
@@ -415,7 +325,7 @@ describe('layout preview page', () => {
     await userEvent.click(screen.getByRole('link', { name: 'Multi-step devotion' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Devotion Title' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Missing optional sections' }))
-    expect(await screen.findByText('The prayer text has not been published yet.')).toBeInTheDocument()
+    expect(await screen.findByText('No prayer text is held for this devotion yet.')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'How to Pray' })).not.toBeInTheDocument()
     expect(requests.filter(r => r.path.startsWith('/devotions'))).toEqual([])          // never touches the API
   })

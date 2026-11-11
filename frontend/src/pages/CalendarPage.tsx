@@ -5,10 +5,13 @@ import { CalendarDays, Link2, RefreshCw, Unplug } from 'lucide-react'
 import { Button, Card, Dialog } from '../components/ui'
 import { ErrorMessage, Loading, PageHeader } from '../components/common'
 import { EventRow } from '../components/calendar/EventRow'
+import { PrayerOccurrenceRow } from '../components/ruleOfLife/PrayerOccurrenceRow'
 import { api, ApiError } from '../services/api'
 import { useAction } from '../hooks/useAction'
 import { CALENDAR_API, dayHeading, groupByDay, useCalendarStatus } from '../lib/calendar'
-import type { CalendarEventsPage } from '../types'
+import { useRuleOccurrences } from '../lib/ruleOfLife'
+import type { RuleOccurrence } from '../types/ruleOfLife'
+import type { CalendarEvent, CalendarEventsPage } from '../types'
 
 const RETURN_MESSAGES: Record<string, { ok: boolean; text: string }> = {
   connected: { ok: true, text: 'Google Calendar is connected.' },
@@ -62,6 +65,10 @@ export function CalendarPage() {
 
   const message = returned ? RETURN_MESSAGES[returned] : undefined
   const groups = groupByDay(events.data?.pages.flatMap(page => page.events) ?? [], timezone)
+  // The Rule of Life's scheduled prayers share the same days as appointments: one list, ordered by time within each day.
+  const [today] = useState(() => new Date())
+  const prayers = useRuleOccurrences(today, 30).data ?? []
+  const days = mergeDays(groups, prayers, timezone)
   return <>
     <PageHeader eyebrow="CALENDAR" title="Calendar">The days ahead, read from your Google Calendar. Optima Pars never changes it.</PageHeader>
     {message && <p className={message.ok ? 'success-message calendar-notice' : 'error-message'} role={message.ok ? 'status' : 'alert'}>{message.text}</p>}
@@ -87,16 +94,41 @@ export function CalendarPage() {
         {active && <Card className="calendar-events">
           <div className="section-title"><CalendarDays size={17} /><h2>Upcoming</h2></div>
           {events.isPending ? <Loading /> : events.isError && !stale ? <><ErrorMessage message={events.error.message} /><Button variant="outline" onClick={() => void events.refetch()}>Try again</Button></> :
-            groups.length === 0 ? <p className="muted">Nothing on your calendar in the next 30 days.</p> : <>
-              {groups.map(group => <section key={group.day} className="event-day"><h3>{dayHeading(group.day, timezone)}</h3><ul className="event-list">{group.events.map(event => <EventRow key={event.id + (event.start ?? event.start_date)} event={event} timeZone={timezone} />)}</ul></section>)}
+            days.length === 0 ? <p className="muted">Nothing on your calendar in the next 30 days.</p> : <>
+              {days.map(group => <DaySection key={group.day} group={group} timezone={timezone} />)}
               {events.hasNextPage && <Button variant="outline" onClick={() => void events.fetchNextPage()} disabled={events.isFetchingNextPage}>{events.isFetchingNextPage ? 'Loading…' : 'Show more'}</Button>}
               {events.isFetchNextPageError && <ErrorMessage message={events.error?.message ?? 'Could not load more events.'} />}
             </>}
         </Card>}
       </>}
+    {!active && !status.isPending && days.length > 0 && <Card className="calendar-events">
+      <div className="section-title"><CalendarDays size={17} /><h2>Rule of Life</h2></div>
+      {days.map(group => <DaySection key={group.day} group={group} timezone={timezone} />)}
+    </Card>}
     {confirming && <Dialog open onOpenChange={open => { if (!open && !disconnect.pending) setConfirming(false) }} title="Disconnect Google Calendar?" description="Optima Pars will stop reading your calendar and forget the connection. Your Google account and events are not changed. You can reconnect whenever you like.">
       <ErrorMessage message={disconnect.error} />
       <div className="dialog-actions"><Button variant="outline" onClick={() => setConfirming(false)} disabled={disconnect.pending}>Keep connected</Button><Button variant="destructive" disabled={disconnect.pending} onClick={() => void disconnect.run(() => api(`${CALENDAR_API}/disconnect`, 'DELETE'), () => setConfirming(false))}>{disconnect.pending ? 'Disconnecting…' : 'Disconnect'}</Button></div>
     </Dialog>}
   </>
+}
+
+type Day = { day: string; events: CalendarEvent[]; prayers: RuleOccurrence[] }
+
+/** Appointments and Rule of Life prayers by day, soonest day first. */
+function mergeDays(groups: { day: string; events: CalendarEvent[] }[], prayers: RuleOccurrence[], timeZone?: string): Day[] {
+  const days = new Map<string, Day>()
+  const at = (day: string) => days.get(day) ?? days.set(day, { day, events: [], prayers: [] }).get(day)!
+  for (const group of groups) at(group.day).events.push(...group.events)
+  for (const prayer of prayers) at(prayer.date).prayers.push(prayer)
+  void timeZone
+  return [...days.values()].sort((a, b) => a.day.localeCompare(b.day))
+}
+
+function DaySection({ group, timezone }: { group: Day; timezone?: string }) {
+  // All-day events first, then everything else by its start instant.
+  const items = [
+    ...group.events.map(event => ({ at: event.all_day || !event.start ? -Infinity : Date.parse(event.start), node: <EventRow key={event.id + (event.start ?? event.start_date)} event={event} timeZone={timezone} /> })),
+    ...group.prayers.map(prayer => ({ at: Date.parse(prayer.start), node: <PrayerOccurrenceRow key={`${prayer.entry_id}-${prayer.date}`} occurrence={prayer} /> })),
+  ].sort((a, b) => a.at - b.at)
+  return <section className="event-day"><h3>{dayHeading(group.day, timezone)}</h3><ul className="event-list">{items.map(item => item.node)}</ul></section>
 }

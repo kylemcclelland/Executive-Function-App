@@ -1,5 +1,13 @@
 # Devotions: the prayer page framework and its editorial safeguards
 
+> **Simplified (current state).** The approval and publication workflow described below has been retired. The Oratory shows every devotion and
+> every prayer text held; there is no editorial dashboard, no editor or approver role (`EDITOR_CLERK_USER_IDS` / `APPROVER_CLERK_USER_IDS` are
+> no longer read) and the editorial API endpoints are removed. The reader API is `GET /api/devotions`, `GET /api/devotions/{slug}` and the
+> bookmark routes, all for a signed-in user. A text with no wording is a citation-only record and is labelled "Citation only". The database
+> columns and the historical event log are kept unchanged (nothing was dropped); the sections below describe that history and how the data was
+> imported, and remain accurate about provenance, seeding and the exact-wording rule.
+
+
 **Status: framework only.** The application can display a prayer or a multi-step devotion and can enforce
 the approval workflow. **No prayer or devotional text has been written, seeded, stored or published.** A fresh
 database holds zero devotions and zero prayer texts (migration `0010` creates empty tables; a test asserts it).
@@ -121,25 +129,139 @@ API, **not an interface**: there is no editorial dashboard and no public approva
   focus-trapped dialog with Escape, 40 to 46 px touch targets, design-token colours only (light and dark both audited
   for contrast with no findings at 390 px and 1440 px), mobile-first CSS.
 
+## The Oratory (browsing the library)
+
+`/devotions` is **The Oratory**, the landing page for the published library (UI only: no backend change, no content).
+
+* **One request, filtered in the browser.** The page loads `GET /api/devotions` once; search and categories filter that list, so
+  typing sends nothing. Search matches every word against the **title, subtitle (the short description) and category**,
+  ignoring case, accents and extra spaces. (The list payload carries no overview text, so overview wording is not searched.)
+* **Categories** are All Devotions, Daily Prayer, Our Lord, Our Lady, Saints, Liturgical Seasons and Other. A devotion's free-text
+  `category` is matched to these case-insensitively; **anything else, or none, appears under Other.** When entering real content,
+  use these exact names for the category if you want it under a specific tab.
+* **Saved devotions** are the reader's bookmarked published devotions (from the same list). They are not narrowed by search or category.
+* Search and category live in the address (`?q=...&category=our-lady`), so Back from a devotion returns to the same view.
+* **States are distinct.** An empty library ("No devotions have been added yet..."), a category with nothing in it, a search with no
+  matches, and nothing saved each have their own message. **401, 403, 404, server errors (5xx) and network failures are errors**
+  with their own wording and are never shown as an empty library; 403 offers no retry.
+* No streaks, scores, percentages, reminders or analytics, and browsing stores nothing.
+
+## Editorial review (phase 2)
+
+The private review interface lives at `/editorial/devotions` (queue), `/editorial/devotions/:id` (review) and
+`/editorial/devotions/:id/preview` (private preview). It reuses the existing API and components; nothing parallel exists.
+
+* **Access.** Every screen asks `GET /api/editorial-access`. A signed-in person with no role sees a plain "Editorial review is
+  private" page and the queue is never requested. The server enforces roles on every request regardless, so hiding a screen is
+  kindness, not security. The Oratory shows an "Editorial review" link to editors and approvers only.
+* **The queue** shows, per devotion: title, category, workflow status, **English and Latin status separately**, source
+  verification, reproduction rights, last updated, and a Review action; filterable by status and category (kept in the address).
+  It is a table on wide screens and stacked cards on phones.
+* **The review screen** shows the devotion's information (prose labelled **Unapproved editorial prose** while it is AI-drafted and
+  the devotion is not yet approved), its structure, and each prayer text with its exact wording, source, issuing authority,
+  edition, publication date, link, translation attribution, rights and the basis for them, when it was copied, who entered,
+  verified and approved it, and the last decision with its reason. A **Language** dropdown (the same component as the public
+  pages) chooses which language you are looking at; **it never changes a status**. "Compare languages side by side" shows both
+  at once, read-only.
+* **Decisions** (each behind a confirmation dialog; any that turns something down needs a reason, recorded in the log):
+  mark source verified, submit for approval, approve (names the exact language and warns that any later change cancels it),
+  **return for further research**, **reject** a proposed text, **reject approval**, **withdraw** approval, publish (lists which
+  languages readers would see), unpublish. Buttons that the signed-in role cannot use are disabled with the reason shown.
+* **Rights gate.** A text can be verified only if it holds wording, names its source and attribution, and its rights are
+  `public_domain`, `licensed` or `permission_granted`. `restricted` (the owner's terms do not clearly allow republishing) and
+  `unverified` block it, in the service **and** by database constraint.
+* **Withheld wording.** A text may be *only a citation*: empty wording, a source link and the reason. This is allowed only while it
+  is `proposed` (migration `0011` relaxes that one constraint and keeps it strict for every later state). The review screen
+  explains why there is no wording and links to the source.
+* **Independent languages.** English and Latin are separate records with separate sources, approvals and rejections. A devotion
+  can be published with English alone; Latin appears only after its own approval (tested).
+* **Publication prerequisites.** Publishing needs the devotion approved, at least one prayer text a reader could see, and an
+  approved text for every non-optional prayer step (own or reused). The review screen lists each unmet condition once.
+* **Preview.** `GET /api/editorial/devotions/:id/preview` returns the devotion as the Oratory would render it, **including
+  unapproved texts, each marked** with its status and whether a reader would see it. It is role-gated, never public, and
+  the front end reuses `DevotionView` with an "Unpublished preview" banner.
+
+### Reusing prayers, choices and optional customs
+
+* A step may name `devotion_slug` + `text_slot`: the prayer is **kept once, in its own devotion, and reused** (the Rosary uses the
+  Sign of the Cross, Creed, Our Father, Hail Mary and Glory Be). A reused prayer reaches a reader only if its own devotion is
+  published and the text approved; a devotion cannot be published before the devotions it reuses.
+* `group` marks steps the reader **chooses between** (the four sets of mysteries), `choice_label` names the choice ("Mysteries"),
+  and `optional` marks a traditional custom (Fátima prayer, three Hail Marys) that never blocks publication.
+* Prayer mode keeps the reader's place when the language changes, and keeps the chosen set and decade. There are no checkboxes,
+  counts or completion messages.
+
+### The Language dropdown
+
+One registry (`SUPPORTED_LANGUAGES` in `lib/devotions.ts`: English, Latin) drives the dropdown, the messages and the editorial
+screens, so another language is one more entry plus texts. English is the default and the choice is remembered. A language with no
+text for a prayer shows "**Latin text is not yet available for this devotion**" (or "...this prayer") with buttons to read in a
+language that exists. **Another language is never shown in its place and nothing is ever translated automatically.**
+
+### Seeding the ten drafts
+
+`backend/scripts/seed_devotion_drafts.py` creates the ten foundational devotions as `proposed` drafts
+(Sign of the Cross, Our Father, Hail Mary, Glory Be, Apostles' Creed, The Angelus, The Holy Rosary, Examination of Conscience,
+Act of Contrition, Prayer to St. Michael) plus their sourced text records. It is **idempotent**: an existing devotion is left
+completely untouched (status, approvals, text, edits), repeated runs duplicate nothing, and `--add-missing-texts` only adds a
+source text that is absent. It defaults to a dry run, refuses a database not at migration `0011`, and refuses a SQLite database
+that holds user data. It never approves or publishes anything. The explanatory prose is AI-drafted and marked `ai_draft`; **all
+prayer wording comes from `seed_data/prayer_sources.json`**, copied programmatically from cited sources (see
+`docs/devotion-source-research.md`) and stored with the hash of what was copied, so a reviewer can check it.
+
+## The Prayers of the Rosary (a supplied document)
+
+The owner supplied a document, *The Prayers of the Rosary* (English and Latin; `The Prayers of the Rosary.txt`, SHA-256 `9bf41f32…7c74`, identical
+in wording to the PDF `Prayers_of_the_Rosary_English_and_Latin.pdf`). It names no author, edition, translator or rights holder, so its texts are recorded
+as **"User-supplied document"**, rights **unverified**, and sit in the normal review queue (`proposed`: nothing is verified, approved or published).
+
+* `backend/scripts/import_rosary_prayers.py` slices the document by its headings into `seed_data/rosary_document.json` (never touches a
+  database, writes no wording). Only the page-number lines are dropped and the PDF's page-width line wraps are joined with one space; versicles and
+  responses (`V.`/`R.`) keep their own lines. It stops rather than guess. The document's own introductions and the Fatima "Note" are kept
+  as source commentary in each text's notes, apart from the wording. The pronunciation section is not a prayer and is not imported.
+* `seed_devotion_drafts.py` stores the ten prayers on **The Holy Rosary** as 20 texts in slots `collection-<prayer>` (English and Latin, in the
+  document's order). Wording another devotion already holds (the Baltimore English, the supplied Latin) is a different edition: it is **never overwritten**,
+  no second devotion is created for any of the ten prayers, and each text says when another edition exists. Run with `--add-missing-texts` to add
+  them to a database where the Rosary already exists; seeding again duplicates nothing.
+* The page shows them as an ordered, numbered collection under **The Prayers of the Rosary** with a jump list, the Language dropdown, and an
+  optional **Side by side** layout (Latin and English columns, stacked on a narrow screen). A language a prayer lacks is stated, never replaced.
+  Only approved wording reaches the page, so it is absent until a reviewer approves each text.
+
+## Wording typed by the owner
+
+`backend/scripts/seed_data/owner_supplied_texts.json` holds wording the owner typed in a message (currently the English Act of Contrition),
+stored exactly as given, with source "User-supplied text", rights `unverified`, status `proposed`. Where it says it replaces an earlier cited
+edition, seeding creates only the owner's text for that slot, and the earlier record stays in `prayer_sources.json`. For a database seeded before,
+`seed_devotion_drafts.py --apply-owner-supplied` replaces a text only if it is still exactly the earlier edition (through the normal edit path:
+approvals are discarded and only field names are logged); a text edited since is never touched. Tests: `backend/tests/test_owner_supplied_text.py`.
+
 ## Tests
 
 * `backend/tests/test_devotions.py`: authorization, workflow, source requirements, per-language approval,
   invalidation after any change, tampering behind the app's back, database refusals, input rules, reader privacy,
   bookmarks, empty-by-default.
-* `frontend/src/test/devotions.test.tsx`: simple and complex layouts, missing sections, Latin/English, exact wording,
-  prayer mode, the no-tracking guarantees, pages, and the mobile-first stylesheet contract.
+* `backend/tests/test_devotion_review.py`: withheld wording and rights gates, source metadata as approved content, independent
+  English and Latin, publication prerequisites, reused prayers, grouped and optional steps, recorded decisions, the private
+  preview, and who may reach which endpoint.
+* `backend/tests/test_seed_devotion_drafts.py`: the ten drafts, idempotency, never overwriting, no invented wording (including a
+  check that every stored wording still matches the hash recorded when it was copied), the Rosary's structure, refusals.
+* `backend/tests/test_rosary_document.py`: the document's import word for word, refusals, provenance, no overwriting or duplicates, the review
+  queue, and no public exposure of unapproved wording. `frontend/src/test/rosary.test.tsx`: the ordered collection, language switching, side by side.
+* `frontend/src/test/devotions.test.tsx`, `oratory.test.tsx`, `language.test.tsx`, `editorial.test.tsx`: layouts, the library,
+  the Language dropdown (default, switching, persistence, missing language, no substitution, guided position), the editorial
+  queue, review, role-aware actions with confirmation dialogs, the preview, error handling for 401/403/404/5xx/network, and the
+  mobile-first, token-only stylesheets.
 
-## Before real content can be added
+## Before devotions can be published
 
-1. **Set the roles** (`EDITOR_CLERK_USER_IDS`, `APPROVER_CLERK_USER_IDS`) on Railway. Until then nobody can enter
-   anything. Apply migration `0010` (additive; it runs on the next backend deploy, which has not happened).
-2. **An editorial interface.** Today content is entered through the role-gated API. Decide whether you want a small
-   private editing screen; it must stay behind the same roles.
-3. **A source policy.** Decide which editions and translations are acceptable and their licence terms, per text
-   (`public_domain`, `licensed`, `permission_granted`). Modern English translations are usually under copyright.
-4. **Approve content yourself or with a reviewer you trust.** The software records who approved what; it cannot judge
-   whether wording is faithful. Compare each text to its cited source before approving.
-5. Optional hardening: require the approver to differ from the editor (off now because this is a single-owner app),
-   and add Latin/English paired display checks if you want both versions required together.
-6. When real devotions exist, add the first one with `status` flow end to end and check it on staging with
-   Deployment Protection still on.
+1. **Apply migration `0011`** (and `0010` if not yet applied) to the target database: additive apart from two relaxed or
+   tightened constraints (see its docstring). It runs on the backend's next deploy; a backup first is recommended.
+2. **Seed the drafts** with `scripts/seed_devotion_drafts.py` (dry run first).
+3. **Set the roles** (`EDITOR_CLERK_USER_IDS`, `APPROVER_CLERK_USER_IDS`) on Railway. Until then nobody can enter or approve
+   anything, including you. Use the Clerk user ID of the instance in use (development and production IDs differ).
+4. **Resolve the open source questions** in `docs/devotion-source-research.md` (the Latin texts and the examination of conscience
+   need either written permission or a cleared source). Until then those texts stay as citations.
+5. **Review every text yourself against its source.** The software records who approved what and ties approval to the exact
+   wording and source details; it cannot judge whether wording is faithful or whether an older English form is the one you want.
+6. Optional hardening: require the approver to differ from the editor (off now because this is a single-owner app), and an
+   editing screen for wording and metadata (today those are changed through the role-gated API).

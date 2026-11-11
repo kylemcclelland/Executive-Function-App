@@ -1,0 +1,76 @@
+{
+ "version": 1,
+ "provenance": "User-supplied Latin text",
+ "filename": "latin_prayers_file.txt",
+ "file_sha256": "0e9258a9fff356bef4ed34438c8716cad03ce1c5cc08cd54f0de6f82dd777a8c",
+ "file_bytes": 3022,
+ "texts": [
+  {
+   "devotion_slug": "our-father",
+   "slot": "main",
+   "language": "la",
+   "body": "Pater noster, qui es in caelis,\r\nSanctificetur nomen tuum;\r\nAdveniat regnum tuum;\r\nFiat voluntas tua, sicut in caelo et in terra.\r\nPanem nostrum quotidianum da nobis hodie;\r\nEt dimitte nobis debita nostra, sicut et nos dimittimus debitoribus nostris;\r\nEt ne nos inducas in tentationem, sed libera nos a malo.\r\nAmen ",
+   "body_sha256": "963aac39ec5fb0db4682deccade83eb677eec4c134a1d2b677d09e3715bd5737",
+   "heading_in_file": "Pater Noster (Our Father)",
+   "lines_in_file": "3-10",
+   "observations": [
+    "has trailing spaces at the end of some lines (kept as supplied)"
+   ]
+  },
+  {
+   "devotion_slug": "hail-mary",
+   "slot": "main",
+   "language": "la",
+   "body": "Ave Maria, gratia plena\r\n\r\nDominus tecum\r\n\r\nbenedicta tu in mulieri­bus, \r\n\r\net benedictus fructus ventris tui, Jesus.\r\n\r\nSancta Maria mater Dei,\r\n\r\nora pro nobis peccatoribus, \r\n\r\nnunc et in hora mortis nostrae. \r\n\r\nAmen.",
+   "body_sha256": "a5047589f80445e638b82bb8e429ec9a1e9fd6facb627cbd21f53a89138d63da",
+   "heading_in_file": "Ave Maria (Hail Mary)",
+   "lines_in_file": "14-28",
+   "observations": [
+    "contains the character U+00AD (SOFT HYPHEN), kept as supplied",
+    "has trailing spaces at the end of some lines (kept as supplied)"
+   ]
+  },
+  {
+   "devotion_slug": "apostles-creed",
+   "slot": "main",
+   "language": "la",
+   "body": "Credo in Deum, Patrem omnipotentem, Creatorem caeli et terrae.\r\n\r\nEt in Iesum Christum, Filium eius unicum, Dominum nostrum:\r\n\r\nqui conceptus est de Spiritu Sancto, natus ex Maria Virgine,\r\n\r\npassus sub Pontio Pilato, crucifixus, mortuus, et sepultus,\r\n\r\ndescendit ad inferos,\r\n\r\ntertia die resurrexit a mortuis,\r\n\r\nascendit ad caelos,sedet ad dexteram Dei Patris omnipotentis,\r\n\r\ninde venturus est iudicare vivos et mortuos.\r\n\r\nCredo in Spiritum Sanctum,\r\n\r\nsanctam Ecclesiam catholicam,\r\n\r\nsanctorum communionem,remissionem peccatorum,\r\n\r\ncarnis resurrectionem,\r\n\r\nvitam aeternam.\r\n\r\nAmen.",
+   "body_sha256": "7d346d763eeabfda7ad30d486d9d82d787814c448f21287f04bdb2369c672580",
+   "heading_in_file": "Apostle's Creed",
+   "lines_in_file": "32-58",
+   "observations": [
+    "no space after punctuation in “caelos,sedet”, “communionem,remissionem” (kept as supplied)"
+   ]
+  },
+  {
+   "devotion_slug": "glory-be",
+   "slot": "main",
+   "language": "la",
+   "body": "Gloria Patri, et Filio, et Spiritui Sancto;\r\nsicut erat in principio, et nunc, et semper,\r\net in saecula saeculorum. Amen.",
+   "body_sha256": "0d9fce21c56f28d0857514efafac32929f5b4e01cda17a4e7e2612d6495aca8a",
+   "heading_in_file": "Glory Be",
+   "lines_in_file": "64-66",
+   "observations": []
+  },
+  {
+   "devotion_slug": "the-angelus",
+   "slot": "main",
+   "language": "la",
+   "body": "V. Angelus Domini nuntiavit Mariae,\r\nR. Et concepit de Spiritu Sancto.\r\n\r\nAve Maria, gratia plena, Dominus tecum. Benedicta tu in mulieribus, et benedictus fructus ventris tui, Iesus. Sancta Maria, Mater Dei, ora pro nobis peccatoribus, nunc et in hora mortis nostrae. Amen.\r\n\r\nV. Ecce ancilla Domini,\r\nR. Fiat mihi secundum verbum tuum.\r\n\r\nAve Maria, gratia plena, Dominus tecum. Benedicta tu in mulieribus, et benedictus fructus ventris tui, Iesus. Sancta Maria, Mater Dei, ora pro nobis peccatoribus, nunc et in hora mortis nostrae. Amen.\r\n\r\nV. Et Verbum caro factum est,\r\nR. Et habitavit in nobis.\r\n\r\nAve Maria, gratia plena, Dominus tecum. Benedicta tu in mulieribus, et benedictus fructus ventris tui, Iesus. Sancta Maria, Mater Dei, ora pro nobis peccatoribus, nunc et in hora mortis nostrae. Amen.\r\n\r\nV. Ora pro nobis, sancta Dei Genitrix.\r\nR. Ut digni efficiamur promissionibus Christi.\r\n\r\nOremus. Gratiam tuam, quaesumus, Domine, mentibus nostris infunde; ut, qui, angelo nuntiante, Christi Filii tui incarnationem cognovimus, per passionem eius et crucem, ad resurrectionis gloriam perducamur. Per eundem Christum Dominum nostrum. Amen.",
+   "body_sha256": "41df00c908ed0ebabe1b74daa4088a86d1c1b235fcb4ba3dfcefb08ca323e4d9",
+   "heading_in_file": "Angelus",
+   "lines_in_file": "71-89",
+   "observations": []
+  },
+  {
+   "devotion_slug": "regina-caeli",
+   "slot": "main",
+   "language": "la",
+   "body": "V. Regina caeli, laetare, alleluia.\r\nR. Quia quem meruisti portare, alleluia.\r\nV. Resurrexit, sicut dixit, alleluia.\r\nR. Ora pro nobis Deum, alleluia.\r\nV. Gaude et laetare, Virgo Maria, alleluia.\r\nR. Quia surrexit Dominus vere, alleluia.\r\n\r\nOremus. Deus, qui per resurrectionem Filii tui Domini nostri Iesu Christi mundum laetificare dignatus es: praesta, quaesumus, ut per eius Genetricem Virginem Mariam perpetuae capiamus gaudia vitae. Per eundem Christum Dominum nostrum. Amen.",
+   "body_sha256": "ed1a520aa8729e8855a5cfc22f4c2df65fc76833ab5051b441eff53163dd1b9f",
+   "heading_in_file": "Regina Caeli",
+   "lines_in_file": "94-101",
+   "observations": []
+  }
+ ]
+}

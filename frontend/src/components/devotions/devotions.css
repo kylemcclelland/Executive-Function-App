@@ -92,15 +92,7 @@
 .prayer-mode-nav button { min-height: 46px; min-width: 110px; }
 .prayer-step-count { margin: 0; font-size: 13px; color: var(--ink-soft); text-align: center; }
 
-/* ---- Library and layout preview ---- */
-.devotion-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.devotion-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 18px; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: var(--radius-sm); background: var(--paper); color: inherit; }
-.devotion-card:hover { background: var(--cream); }
-.devotion-card-text { display: grid; gap: 4px; min-width: 0; }
-.devotion-card-title { font-family: var(--font-serif); font-size: 18px; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
-.devotion-card-subtitle { font-size: 13px; color: var(--ink-soft); }
-.devotion-card-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-soft); }
-.devotion-card svg { flex-shrink: 0; color: var(--gold-deep); }
+/* ---- Layout preview ---- */
 .devotion-preview-banner { padding: 12px 16px; border: 1px dashed var(--gold); border-radius: var(--radius-sm); background: var(--gold-soft); font-size: 13px; line-height: 1.6; color: var(--ink-2); }
 .devotion-preview-banner strong { color: var(--ink); }
 .devotion-preview-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -114,3 +106,37 @@
   .prayer-mode-body { padding: 48px 40px 56px; }
   .prayer-mode-nav { padding: 14px 28px calc(14px + env(safe-area-inset-bottom)); }
 }
+
+/* ---- Language dropdown, missing-language message, optional customs, grouped steps ---- */
+.devotion-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.language-select { display: inline-flex; align-items: center; gap: 8px; }
+.language-select label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.language-select select { min-height: 40px; padding: 0 12px; font-size: 15px; color: var(--ink); background: var(--field); border: 1px solid var(--control); border-radius: var(--radius-sm); }
+.language-unavailable { display: grid; gap: 8px; padding: 14px 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: var(--cream); color: var(--ink-2); font-size: 14px; line-height: 1.6; }
+.language-unavailable p { margin: 0; }
+.language-unavailable strong { color: var(--ink); font-weight: 600; }
+.language-unavailable-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.language-unavailable-actions button { min-height: 40px; }
+.prayer-slot-title { margin: 0 0 10px; font-family: var(--font-serif); font-weight: 400; font-size: 20px; color: var(--ink); }
+.prayer-withheld { margin: 0; font-style: italic; color: var(--ink-soft); }
+.step-optional { display: inline-block; padding: 1px 7px; border: 1px solid var(--line-strong); border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+p.step-optional { width: fit-content; margin: 0; }
+.sequence-choice-note { margin: 0 0 8px; font-size: 13px; color: var(--ink-soft); }
+.sequence-choice { margin-top: 10px; padding: 0 14px 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.sequence-choice summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-family: var(--font-serif); font-size: 17px; color: var(--ink); }
+.sequence-choice[open] summary { margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+.prayer-mode-bar .language-select { margin-right: 4px; }
+
+/* ---- A collection of prayers in order (the Rosary's prayers), one language or Latin and English side by side ---- */
+.prayer-collection .reading-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.collection-nav { margin: 0 0 8px; }
+.collection-nav ol { display: flex; flex-wrap: wrap; gap: 6px 8px; list-style: none; margin: 0; padding: 0; counter-reset: collection; }
+.collection-nav li { counter-increment: collection; }
+.collection-nav a { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 4px 12px; font-size: 13px; color: var(--green-deep); background: var(--cream); border: 1px solid var(--line-strong); border-radius: 999px; }
+.collection-nav a::before { content: counter(collection); font-weight: 700; color: var(--gold-deep); }
+.collection-prayer { scroll-margin-top: 72px; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+.collection-prayer-title { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; font-family: var(--font-serif); font-weight: 400; font-size: 22px; line-height: 1.3; color: var(--ink); }
+.collection-number { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; font-size: 14px; font-weight: 700; color: var(--gold-deep); background: var(--cream); border: 1px solid var(--gold-line); border-radius: 50%; }
+.collection-pair { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+.collection-column { min-width: 0; padding: 14px 16px; background: var(--cream); border-radius: var(--radius-sm); }
+@media (min-width: 760px) { .collection-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; } }

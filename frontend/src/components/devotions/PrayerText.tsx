@@ -1,13 +1,13 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useId, type ReactNode } from 'react'
 import { Feather, Minus, Plus } from 'lucide-react'
 import { Button } from '../ui'
-import { isResponseLine, languageLabel, licenseLabels, safeUrl, type useReadingPreferences } from '../../lib/devotions'
+import { SUPPORTED_LANGUAGES, isResponseLine, languageLabel, licenseLabels, safeUrl, type useReadingPreferences } from '../../lib/devotions'
 import type { LanguageChoice, PrayerText, TextSource } from '../../types/devotions'
 
 export type ReadingPreferences = ReturnType<typeof useReadingPreferences>
 
 /**
- * Prayer wording, shown exactly as approved: every character, space and line break is kept (the text
+ * Prayer wording, shown exactly as stored: every character, space and line break is kept (the text
  * node content equals the stored body). Nothing is trimmed, re-wrapped, translated or corrected here.
  */
 export function PrayerBody({ text }: { text: PrayerText }) {
@@ -18,7 +18,9 @@ export function PrayerBody({ text }: { text: PrayerText }) {
 export function SourceNote({ source }: { source: TextSource }) {
   const rows: { label: string; value: ReactNode }[] = []
   if (source.title) rows.push({ label: 'Source', value: source.title })
+  if (source.authority) rows.push({ label: 'Issued by', value: source.authority })
   if (source.edition) rows.push({ label: 'Edition', value: source.edition })
+  if (source.date) rows.push({ label: 'Published', value: source.date })
   if (source.is_translation && source.translator) rows.push({ label: 'Translation', value: source.translator })
   if (source.attribution) rows.push({ label: 'Attribution', value: source.attribution })
   const rights = licenseLabels[source.license_status]
@@ -30,27 +32,44 @@ export function SourceNote({ source }: { source: TextSource }) {
 }
 
 /** One language version of a prayer: its title, exact wording and where it came from. */
-export function PrayerVersion({ text, showLanguage, compact = false }: { text: PrayerText; showLanguage: boolean; compact?: boolean }) {
+export function PrayerVersion({ text, showLanguage, compact = false, badge }: { text: PrayerText; showLanguage: boolean; compact?: boolean; badge?: ReactNode }) {
+  const withheld = !text.body.trim()
+  // A citation-only record has no wording (rights not cleared, or not supplied): it is labelled, never shown as a prayer.
   return <div className="prayer-version">
-    {showLanguage && <p className="prayer-language">{languageLabel(text.language)}</p>}
+    {(showLanguage || badge) && <p className="prayer-language">{showLanguage && languageLabel(text.language)}{badge}</p>}
     {text.title && <h3 className="prayer-title" lang={text.language}>{text.title}</h3>}
-    <PrayerBody text={text} />
+    {withheld ? <p className="prayer-withheld"><strong>Citation only.</strong> No wording is held for this text; see its source below.</p> : <PrayerBody text={text} />}
     {compact ? <details className="prayer-source-details"><summary>Source</summary><SourceNote source={text.source} /></details> : <SourceNote source={text.source} />}
   </div>
 }
 
-/** Shown wherever approved wording does not exist (yet). It never hints at what the wording is. */
-export function UnpublishedNotice({ compact = false }: { compact?: boolean }) {
+/** Shown wherever no prayer text is held (yet). */
+export function NoTextNotice({ compact = false }: { compact?: boolean }) {
   return <div className={`prayer-unpublished ${compact ? 'is-compact' : ''}`} role="note">
     <Feather size={compact ? 16 : 22} strokeWidth={1.4} aria-hidden="true" />
-    <div><p><strong>The prayer text has not been published yet.</strong></p>{!compact && <p className="muted">Prayer wording appears here only after its source has been verified and the exact text has been approved.</p>}</div>
+    <div><p><strong>No prayer text is held for this devotion yet.</strong></p>{!compact && <p className="muted">Wording appears here once a text has been added to the library.</p>}</div>
   </div>
 }
 
-export function LanguageToggle({ languages, value, onChange }: { languages: string[]; value: LanguageChoice; onChange: (choice: LanguageChoice) => void }) {
-  if (languages.length < 2) return null
-  const options = [...languages.map(code => ({ value: code, label: languageLabel(code) })), { value: 'both', label: 'Both' }]
-  return <div className="reading-toggle" role="group" aria-label="Language">{options.map(option => <Button key={option.value} size="sm" variant={value === option.value ? 'default' : 'ghost'} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>{option.label}</Button>)}</div>
+/**
+ * The compact language dropdown. It lists every supported language, whether or not this prayer has a
+ * text in it: choosing one without a text shows a clear message instead (see LanguageUnavailable),
+ * and never substitutes another language.
+ */
+export function LanguageSelect({ value, onChange }: { value: LanguageChoice; onChange: (language: LanguageChoice) => void }) {
+  const id = useId()
+  return <div className="language-select">
+    <label htmlFor={id}>Language</label>
+    <select id={id} value={value} onChange={event => onChange(event.target.value)}>{SUPPORTED_LANGUAGES.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}</select>
+  </div>
+}
+
+/** "Latin text is not yet available for this devotion", with a way to read in a language that exists. */
+export function LanguageUnavailable({ language, available, onChoose, subject }: { language: LanguageChoice; available: string[]; onChoose: (language: LanguageChoice) => void; subject: string }) {
+  return <div className="language-unavailable" role="note">
+    <p><strong>{languageLabel(language)} text is not yet available for {subject}.</strong></p>
+    {available.length > 0 && <p className="language-unavailable-actions"><span>Available in:</span>{available.map(code => <Button key={code} variant="outline" size="sm" onClick={() => onChoose(code)}>Read in {languageLabel(code)}</Button>)}</p>}
+  </div>
 }
 
 export function TextSizeControl({ prefs }: { prefs: ReadingPreferences }) {

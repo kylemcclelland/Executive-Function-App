@@ -1,54 +1,106 @@
 import { useCallback, useState } from 'react'
-import type { Devotion, LanguageChoice, LicenseStatus, PrayerText, TextSize } from '../types/devotions'
+import { ApiError } from '../services/api'
+import type { Devotion, DevotionBrief, DevotionStep, LanguageChoice, LicenseStatus, PrayerText, TextSize } from '../types/devotions'
 
-const LANGUAGE_NAMES: Record<string, string> = { en: 'English', la: 'Latin' }
-/** Latin before English before anything else, so a bilingual pair always reads in the same order. */
-const LANGUAGE_RANK: Record<string, number> = { la: 0, en: 1 }
+// ---- Languages ---------------------------------------------------------------------------------
+/**
+ * The languages the devotional system supports. Adding a language later is one more entry here (and
+ * texts in that language); the selector, the messages and the editorial review all follow from it.
+ * Nothing is ever translated automatically: a language with no text for a prayer simply has none.
+ */
+export const SUPPORTED_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'la', label: 'Latin' },
+] as const
+export const DEFAULT_LANGUAGE = 'en'
+
+export const isSupportedLanguage = (code: string | null | undefined): code is string => SUPPORTED_LANGUAGES.some(language => language.code === code)
 
 export function languageLabel(code: string): string {
-  if (LANGUAGE_NAMES[code]) return LANGUAGE_NAMES[code]
+  const known = SUPPORTED_LANGUAGES.find(language => language.code === code)
+  if (known) return known.label
   try { return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code } catch { return code }
 }
 
+/** Latin before English before anything else, so a bilingual pair always reads in the same order. */
+const LANGUAGE_RANK: Record<string, number> = { la: 0, en: 1 }
+const byLanguage = (a: { language: string }, b: { language: string }) => (LANGUAGE_RANK[a.language] ?? 9) - (LANGUAGE_RANK[b.language] ?? 9) || a.language.localeCompare(b.language)
+
 export function sortLanguages(codes: string[]): string[] {
-  return [...new Set(codes)].sort((a, b) => (LANGUAGE_RANK[a] ?? 9) - (LANGUAGE_RANK[b] ?? 9) || a.localeCompare(b))
+  return [...new Set(codes)].sort((a, b) => byLanguage({ language: a }, { language: b }))
 }
 
-export function availableLanguages(texts: PrayerText[]): string[] {
+/** The languages in which at least one of these texts exists. */
+export function availableLanguages(texts: { language: string }[]): string[] {
   return sortLanguages(texts.map(text => text.language))
 }
 
-/** The reader's preferred language, or the best available one when it is not offered here. */
-export function resolveLanguage(preference: LanguageChoice, available: string[]): LanguageChoice {
-  if (available.length === 0) return preference
-  if (preference === 'both') return available.length > 1 ? 'both' : available[0]
-  if (available.includes(preference)) return preference
-  return available.includes('en') ? 'en' : available[0]
+/** The reader's language: their choice if it is supported, otherwise the default. Never guessed from the texts. */
+export function resolveLanguage(preference: LanguageChoice | null | undefined): LanguageChoice {
+  return isSupportedLanguage(preference) ? preference : DEFAULT_LANGUAGE
 }
 
-/** Slots in the order the prayer texts were given, each with its versions in reading order. */
-export function groupBySlot(texts: PrayerText[]): { slot: string; versions: PrayerText[] }[] {
-  const slots = new Map<string, PrayerText[]>()
-  for (const text of texts) slots.set(text.slot, [...(slots.get(text.slot) ?? []), text])
-  return [...slots].map(([slot, versions]) => ({ slot, versions: [...versions].sort((a, b) => (LANGUAGE_RANK[a.language] ?? 9) - (LANGUAGE_RANK[b.language] ?? 9) || a.language.localeCompare(b.language)) }))
+// ---- Prayer texts and where steps find them ---------------------------------------------------
+export interface TextGroup { key: string; slot: string; owner: string; versions: PrayerText[] }
+
+const ownerOf = (text: { devotion_slug?: string }, devotion: { slug: string }) => text.devotion_slug ?? devotion.slug
+
+/** The versions of each prayer (one per language), in the order the prayers were given. A reused prayer is its own group. */
+export function groupTexts(devotion: { slug: string }, texts: PrayerText[]): TextGroup[] {
+  const groups = new Map<string, TextGroup>()
+  for (const text of texts) {
+    const owner = ownerOf(text, devotion)
+    const key = `${owner}/${text.slot}`
+    const group = groups.get(key) ?? { key, slot: text.slot, owner, versions: [] }
+    group.versions = [...group.versions, text].sort(byLanguage)
+    groups.set(key, group)
+  }
+  return [...groups.values()]
 }
 
-/** The versions of one text to show for a language choice, with a note when the choice is not offered. */
-export function versionsFor(versions: PrayerText[], choice: LanguageChoice): { shown: PrayerText[]; missing: string | null } {
-  if (choice === 'both') return { shown: versions, missing: null }
-  const match = versions.filter(version => version.language === choice)
-  if (match.length) return { shown: match, missing: null }
-  return { shown: versions.slice(0, 1), missing: choice }
+/** Slots named collection-<prayer> hold a devotion's ordered collection of prayers (the Rosary's own prayers), apart from its steps. */
+export const COLLECTION_PREFIX = 'collection-'
+const inCollection = (text: PrayerText) => text.slot.startsWith(COLLECTION_PREFIX) && !text.devotion_slug
+
+/** A devotion's collection of prayers, in the order given, and every other text. Nothing is dropped; each text is in exactly one list. */
+export function splitCollection(devotion: { slug: string }, texts: PrayerText[]): { collection: TextGroup[]; rest: PrayerText[] } {
+  return { collection: groupTexts(devotion, texts.filter(inCollection)), rest: texts.filter(text => !inCollection(text)) }
 }
 
+/** The key under which a prayer step's wording is held: its own devotion's slot, or a reused one's. */
+export const stepTextKey = (devotion: { slug: string }, step: DevotionStep) => step.text_slot ? `${step.devotion_slug ?? devotion.slug}/${step.text_slot}` : null
+
+/** A readable name for a prayer: the title of the first step that uses it. */
+export function textGroupTitle(devotion: Devotion, group: TextGroup): string | null {
+  return devotion.steps.find(step => stepTextKey(devotion, step) === group.key && step.title)?.title ?? null
+}
+
+/** The versions of one prayer to show for a language: exactly that language, or none. Never another language in its place. */
+export function versionsFor(versions: PrayerText[], language: LanguageChoice): { shown: PrayerText[]; missing: string | null } {
+  const match = versions.filter(version => version.language === language)
+  return match.length ? { shown: match, missing: null } : { shown: [], missing: language }
+}
+
+// ---- Steps that the reader chooses between (the Rosary's sets of mysteries) -------------------
+export const stepGroups = (steps: DevotionStep[]): string[] => [...new Set(steps.map(step => step.group).filter((group): group is string => !!group))]
+
+/** The steps to walk through: everything common, plus the chosen group's own steps. */
+export const visibleSteps = (steps: DevotionStep[], group: string | null): DevotionStep[] => steps.filter(step => !step.group || step.group === group)
+
+// ---- Display helpers ------------------------------------------------------------------------------
 /** Only web links are ever made clickable; anything else is shown as plain text. */
-export function safeUrl(value: string | null): string | null {
+export function safeUrl(value: string | null | undefined): string | null {
   if (!value) return null
   try { const url = new URL(value); return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null } catch { return null }
 }
 
 export const licenseLabels: Record<LicenseStatus, string | null> = {
-  unverified: null, public_domain: 'Public domain', licensed: 'Used under licence', permission_granted: 'Used with permission',
+  unverified: null, restricted: null, public_domain: 'Public domain', licensed: 'Used under licence', permission_granted: 'Used with permission',
+}
+
+/** Rights wording for the editorial screens, where an unknown or restricted status must be stated, not hidden. */
+export const rightsLabels: Record<LicenseStatus, string> = {
+  unverified: 'Rights not yet checked', restricted: 'Rights not cleared: wording withheld', public_domain: 'Public domain', licensed: 'Licensed', permission_granted: 'Permission granted',
 }
 
 /** Versicle and response markers at the start of a line (℣ ℟ with or without a full stop, or V. / R.). Display styling only. */
@@ -81,12 +133,62 @@ function remember(key: string, value: string) {
 
 export function useReadingPreferences() {
   const [size, setSize] = useState<TextSize>(() => { const saved = stored(SIZE_KEY); return SIZES.includes(saved as TextSize) ? saved as TextSize : 'normal' })
-  const [language, setLanguageState] = useState<LanguageChoice>(() => stored(LANGUAGE_KEY) ?? 'en')
+  const [language, setLanguageState] = useState<LanguageChoice>(() => resolveLanguage(stored(LANGUAGE_KEY)))
   const step = useCallback((direction: 1 | -1) => setSize(current => {
     const next = SIZES[Math.min(SIZES.length - 1, Math.max(0, SIZES.indexOf(current) + direction))]
     remember(SIZE_KEY, next)
     return next
   }), [])
-  const setLanguage = useCallback((choice: LanguageChoice) => { remember(LANGUAGE_KEY, choice); setLanguageState(choice) }, [])
+  const setLanguage = useCallback((choice: LanguageChoice) => { const next = resolveLanguage(choice); remember(LANGUAGE_KEY, next); setLanguageState(next) }, [])
   return { size, larger: () => step(1), smaller: () => step(-1), canGrow: size !== 'xlarge', canShrink: size !== 'normal', language, setLanguage }
+}
+
+// ---- Browsing the library (The Oratory) -------------------------------------------------------
+export const LIBRARY_CATEGORIES = [
+  { key: 'daily-prayer', label: 'Daily Prayer' },
+  { key: 'our-lord', label: 'Our Lord' },
+  { key: 'our-lady', label: 'Our Lady' },
+  { key: 'saints', label: 'Saints' },
+  { key: 'liturgical-seasons', label: 'Liturgical Seasons' },
+  { key: 'other', label: 'Other' },
+] as const
+export type CategoryKey = typeof LIBRARY_CATEGORIES[number]['key']
+
+/** Lower-case, accent-free, single-spaced: so "Pater", "pater " and "PÁTER" are the same search. */
+export function normalizeText(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/** The library category a devotion's free-text category belongs under. Anything unrecognised, or absent, is Other. */
+export function categoryKeyOf(category: string | null): CategoryKey {
+  const wanted = normalizeText(category ?? '')
+  return LIBRARY_CATEGORIES.find(item => normalizeText(item.label) === wanted)?.key ?? 'other'
+}
+
+export const categoryLabel = (key: CategoryKey) => LIBRARY_CATEGORIES.find(item => item.key === key)!.label
+
+export function isCategoryKey(value: string | null): value is CategoryKey {
+  return LIBRARY_CATEGORIES.some(item => item.key === value)
+}
+
+/** Every search word must appear in the title, the short description (subtitle) or the category. */
+export function matchesSearch(devotion: DevotionBrief, query: string): boolean {
+  const words = normalizeText(query).split(' ').filter(Boolean)
+  if (words.length === 0) return true
+  const haystack = normalizeText([devotion.title, devotion.subtitle, devotion.category].filter(Boolean).join(' '))
+  return words.every(word => haystack.includes(word))
+}
+
+export type LibraryErrorKind = 'unauthenticated' | 'forbidden' | 'unavailable' | 'server' | 'network' | 'other'
+
+/** Each failure is told apart: none of them may ever be mistaken for an empty library. */
+export function describeLibraryError(error: unknown): { kind: LibraryErrorKind; message: string } {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return { kind: 'unauthenticated', message: 'Your session couldn’t be verified. Please sign in again.' }
+    if (error.status === 403) return { kind: 'forbidden', message: 'Your account doesn’t have access to the devotional library.' }
+    if (error.status === 404) return { kind: 'unavailable', message: 'The devotional library isn’t available on this server yet (404 Not Found). The server probably needs to be updated.' }
+    if (error.status >= 500) return { kind: 'server', message: `The devotional library is temporarily unavailable (server error ${error.status}). Please try again in a moment.` }
+    return { kind: 'other', message: error.message }
+  }
+  return { kind: 'network', message: 'We couldn’t reach the server. Check your connection and try again.' }
 }

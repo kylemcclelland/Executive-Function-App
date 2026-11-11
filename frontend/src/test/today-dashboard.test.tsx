@@ -14,6 +14,7 @@ const task = (id: string, title: string, fields: Partial<Task> = {}): Task => ({
 const json = (data: unknown, status = 200) => new Response(status === 204 ? null : JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 
 let tasks: Task[]
+let calendar: unknown
 let priorities: string[]
 let notes: NoteBrief[] | 'fail'
 let books: { items: { id: string; title: string; authors: string[] }[]; total: number } | 'fail'
@@ -21,6 +22,7 @@ let requests: { url: string; method: string; body?: Record<string, unknown> }[]
 let queryClient: QueryClient
 
 beforeEach(() => {
+  calendar = null
   tasks = [task('a', 'Write the first paragraph'), task('b', 'Water the plants', { next_action: 'Fill the can' }), task('c', 'Call the dentist'), task('d', 'Mail the letter'), task('done', 'Already finished', { status: 'completed' })]
   priorities = []
   notes = [{ id: 'n1', title: 'On attention', note_type: 'reflection', book_id: null, book_title: 'The Imitation of Christ', project_id: null, project_name: null, source_location: null, tags: [], excerpt: '', updated_at: '2030-03-05T10:00:00Z' }]
@@ -40,6 +42,7 @@ beforeEach(() => {
     if (patch && method === 'PATCH') { Object.assign(tasks.find(t => t.id === patch[1])!, body); return json({}) }
     if (url.startsWith('/notes')) return notes === 'fail' ? json({ detail: 'x' }, 500) : json(notes)
     if (url.startsWith('/books')) return books === 'fail' ? json({ detail: 'x' }, 500) : json({ ...books, page: 1, page_size: 3, total_pages: 1 })
+    if (url.startsWith('/liturgical-calendar/')) return calendar === null ? json({ detail: 'The liturgical calendar is unavailable' }, 503) : json(calendar)
     if (url === '/integrations/google-calendar/status') return json({ configured: false, status: 'not_connected', account_email: null, connected_at: null, last_successful_sync_at: null })
     return json({ detail: `Unhandled ${method} ${url}` }, 404)
   }))
@@ -154,13 +157,30 @@ describe('Today dashboard', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: /Reading/ })).not.toBeInTheDocument())
   })
 
-  it('reserves Living Liturgically as a clearly inactive preview and invents nothing', async () => {
+  it('shows the traditional calendar card near the top of Today, above the priorities, and keeps the other features', async () => {
+    calendar = { date: '2030-03-05', edition: 'roman_1960', celebration: 'Filler Feast', celebration_latin: 'Fillerii', celebration_type: 'feast', type_label: 'Feast', qualifier: null, rank: 'I. classis', rank_class: 'I', rank_label: 'I Class', season: 'Lent', season_code: 'Quad1', commemorations: [], description: null, engine: { name: 'Divinum Officium', url: 'https://example.org', commit: null, version: 'Rubrics 1960 - 1960' } }
     setup()
-    const card = (await screen.findByRole('heading', { name: 'Living Liturgically' })).closest('.card') as HTMLElement
-    expect(within(card).getByText('Coming later')).toBeInTheDocument()
-    expect(within(card).getByText(/not connected to a liturgical calendar yet, so nothing is shown/)).toBeInTheDocument()
-    expect(card.querySelector('[aria-hidden="true"]')).not.toBeNull()
-    expect(card.textContent).not.toMatch(/St\.? [A-Z]|Saint [A-Z]|Feast of|Memorial of|Solemnity|Optional Memorial/)
-    expect(requests.some(r => /liturg|saint/i.test(r.url))).toBe(false)
+    const card = (await screen.findByRole('heading', { name: 'Filler Feast' })).closest('.calendar-card') as HTMLElement
+    const priorities = await screen.findByRole('heading', { name: /Today’s Priorities/ })
+    expect(card.compareDocumentPosition(priorities) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(card).getByRole('link', { name: /Read Today’s Divine Office/ })).toHaveAttribute('href', expect.stringMatching(/^\/divine-office\?date=\d{4}-\d{2}-\d{2}$/))
+    expect(screen.getByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument()
+    expect(await screen.findByText('Water the plants')).toBeInTheDocument()
+  })
+
+  it('still loads Today completely when the traditional calendar is unavailable', async () => {
+    setup()
+    expect(await screen.findByText(/The traditional calendar is unavailable right now/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Today’s Priorities/ })).toBeInTheDocument()
+    expect(await screen.findByText('Water the plants')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('replaces the reserved Living Liturgically placeholder with the traditional calendar card', async () => {
+    setup()
+    await screen.findByRole('heading', { name: /Today’s Priorities/ })
+    expect(screen.queryByText('Living Liturgically')).toBeNull()
+    expect(screen.queryByText('Coming later')).toBeNull()
+    expect(await screen.findByText('Traditional Liturgical Calendar')).toBeInTheDocument()
   })
 })
