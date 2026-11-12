@@ -187,6 +187,22 @@ def test_the_endpoint_needs_sign_in_validates_input_and_reports_an_unavailable_e
     assert unavailable.status_code == 503 and "unavailable" in unavailable.json()["detail"] and "not configured" in unavailable.json()["detail"]
 
 
+def test_the_route_is_registered_on_the_application_the_server_runs(application):
+    # A production API built before this route answered FastAPI's own 404 {"detail":"Not Found"}; the route must be in the real app's table.
+    assert "get" in application.openapi()["paths"]["/api/liturgical-calendar/{day}"]
+    anonymous = TestClient(application, headers={})
+    assert anonymous.get("/api/liturgical-calendar/2026-11-10?edition=roman_1960").status_code == 401   # exists, but sign-in first
+    assert anonymous.get("/api/no-such-route").status_code == 404                                      # what a missing route looks like
+
+
+def test_a_day_the_engine_cannot_answer_is_unavailable_not_missing(application, monkeypatch):
+    def fail(config, day):
+        raise EngineUnavailable("The engine did not return a celebration for this date.")
+    monkeypatch.setattr(calendar, "calendar", fail)
+    response = TestClient(application, headers=bearer("user_reader")).get("/api/liturgical-calendar/2026-11-10?edition=roman_1960")
+    assert response.status_code == 503 and "unavailable" in response.json()["detail"]
+
+
 @needs_engine
 def test_the_endpoint_returns_the_structured_calendar_and_caches_it(application, engine_on, monkeypatch):
     client = TestClient(application, headers=bearer("user_reader"))

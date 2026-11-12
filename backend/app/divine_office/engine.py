@@ -41,6 +41,13 @@ def horas_dir(config: EngineConfig) -> Path:
 
 @lru_cache(maxsize=4)
 def upstream_commit(path: str) -> str | None:
+    # The production image holds an extracted archive with no git: scripts/fetch_divinum_officium.py records the pinned commit beside it.
+    try:
+        recorded = Path(path, "UPSTREAM_COMMIT").read_text(encoding="ascii").strip()
+    except (OSError, UnicodeDecodeError):
+        recorded = ""
+    if len(recorded) == 40 and all(c in "0123456789abcdef" for c in recorded):
+        return recorded
     try:
         done = subprocess.run(["git", "-C", path, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10, check=False)
     except (OSError, subprocess.SubprocessError):
