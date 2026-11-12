@@ -111,3 +111,19 @@ class CoverMissingOut(Output):
     blocked_until: datetime | None = None
     retry_after_seconds: int | None = None
     cooldown_reason: Literal["rate_limited", "unavailable"] | None = None
+
+
+class CoverAutoOut(Output):
+    """The user's resumable enrichment job, as the Library shows it."""
+
+    exists: bool
+    status: Literal["running", "paused", "done"] | None
+    waiting: bool                       # running, but holding off until next_run_at
+    books_checked: int
+    covers_found: int
+    without_cover: int
+    errors: int
+    remaining: int | None               # books that could still get a cover
+    next_run_at: datetime | None
+    last_progress_at: datetime | None
+    last_error: str | None

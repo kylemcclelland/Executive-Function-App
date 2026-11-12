@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -386,6 +387,37 @@ class CoverServiceState(Base):
     __tablename__ = "cover_service_state"
     name: Mapped[str] = mapped_column(String(40), primary_key=True)
     blocked_until: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+class CoverEnrichmentJob(Base):
+    """A user's resumable cover-enrichment job: the worker continues it until nothing is left.
+
+    One row per user. ``next_run_at`` is when the worker may touch it again (a cooldown, a backoff,
+    or right now); ``claimed_until`` is a bounded lease so two worker passes can never run the same
+    job at once. ``skip_ids`` carries forward the book ids each batch finished with, exactly as the
+    interactive endpoint does. Counters only ever grow; completed work survives any failure.
+    """
+
+    __tablename__ = "cover_enrichment_jobs"
+    __table_args__ = (
+        CheckConstraint("status IN ('running','paused','done')", name="cover_job_status"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(10), default="running")
+    books_checked: Mapped[int] = mapped_column(Integer, default=0)
+    covers_found: Mapped[int] = mapped_column(Integer, default=0)
+    without_cover: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[int] = mapped_column(Integer, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    unavailable_streak: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(120))
+    skip_ids: Mapped[list] = mapped_column(JSON, default=list)
+    next_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    claimed_until: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    last_progress_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 

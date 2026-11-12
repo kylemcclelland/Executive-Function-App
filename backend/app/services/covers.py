@@ -153,13 +153,14 @@ def lookup_cover(isbn: str) -> Lookup:
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return Lookup(NOT_FOUND)
-        if exc.code == 429:
+        if exc.code in (429, 403):
+            # Open Library's documented over-limit answer is 403 Forbidden; some proxies say 429.
             header = exc.headers.get("Retry-After") if exc.headers else None
             logger.warning(
                 "open_library rate limit: http_status=%s retry_after_header=%r",
                 exc.code, header,
             )
-            return Lookup(RATE_LIMITED, parse_retry_after(header, utcnow()), http_status=429)
+            return Lookup(RATE_LIMITED, parse_retry_after(header, utcnow()), http_status=exc.code)
         if exc.code == 503:
             header = exc.headers.get("Retry-After") if exc.headers else None
             logger.warning(
