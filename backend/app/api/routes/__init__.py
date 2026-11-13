@@ -67,7 +67,11 @@ def read_user(user: CurrentUser):
 
 @router.patch("/api/user", response_model=s.UserOut)
 def update_user(body: s.UserPatch, db: DB, user: CurrentUser):
-    user.timezone = body.timezone
+    values = body.model_dump(exclude_unset=True)
+    if body.timezone is not None:
+        user.timezone = body.timezone
+    if "calendar_provider" in values:
+        user.calendar_provider = values["calendar_provider"]
     db.flush()
     return user
 

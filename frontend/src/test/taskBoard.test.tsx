@@ -51,7 +51,7 @@ beforeEach(() => {
       tasks = tasks.filter(t => t.id !== url.pathname.split('/')[2])
       return new Response(null, { status: 204 })
     }
-    if (url.pathname === '/projects') return response([{ id: 'p1', name: 'Homiletics', status: 'active' }])
+    if (url.pathname === '/projects') return response([{ id: 'p1', name: 'Homiletics', status: 'active' }, { id: 'p2', name: 'Scriptorium', status: 'active' }])
     if (url.pathname === '/tasks' && method === 'POST') {
       const created = makeTask('t-new', body.title, body)
       tasks = [created, ...tasks]
@@ -230,5 +230,41 @@ describe('deleting a ticket from the board', () => {
     expect(dragStart).toBe(false)                        // preventDefault was called
     await user.click(remove)
     expect(within(await screen.findByRole('dialog')).queryByLabelText(/Task title/)).toBeNull()   // confirm, not editor
+  })
+})
+
+describe('assigning a ticket to any project', () => {
+  it('lists every project, preselects the board filter, and lets the user pick another', async () => {
+    const user = setup('/board?project=p1')
+    await screen.findByText('Write the sermon')
+    await user.click(screen.getByRole('button', { name: 'Add Task' }))
+    const dialog = await screen.findByRole('dialog')
+    const select = within(dialog).getByLabelText('Project')
+    expect(select).toHaveValue('p1')                                   // the filter, as a convenience
+    expect(within(select).getByRole('option', { name: 'No project' })).toBeInTheDocument()
+    await user.selectOptions(select, 'p2')
+    await user.type(within(dialog).getByLabelText(/Task title/), 'Catalogue the incunabula')
+    await user.click(within(dialog).getByRole('button', { name: 'Create task' }))
+    await waitFor(() => {
+      const post = requests.find(r => r.method === 'POST' && r.url === '/tasks')
+      expect(post!.body as { project_id: string }).toMatchObject({ project_id: 'p2', task_kind: 'board' })
+    })
+    // The board's filter did not move: it still shows p1, and the p2 ticket stays out of view.
+    expect(screen.getByLabelText('Filter by project')).toHaveValue('p1')
+    expect(screen.queryByText('Catalogue the incunabula')).not.toBeInTheDocument()
+  })
+
+  it('creates unassigned tasks when no project is chosen', async () => {
+    const user = setup()
+    await screen.findByText('Write the sermon')
+    await user.click(screen.getByRole('button', { name: 'Add Task' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Project')).toHaveValue('')
+    await user.type(within(dialog).getByLabelText(/Task title/), 'Sweep the cloister')
+    await user.click(within(dialog).getByRole('button', { name: 'Create task' }))
+    await waitFor(() => {
+      const post = requests.find(r => r.method === 'POST' && r.url === '/tasks')
+      expect((post!.body as { project_id: string | null }).project_id).toBeNull()
+    })
   })
 })

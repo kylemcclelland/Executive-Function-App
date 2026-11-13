@@ -25,7 +25,7 @@ let requests: string[]
 
 function mount(answer: () => Response | Promise<Response>) {
   requests = []
-  vi.stubGlobal('fetch', vi.fn(async (input: string) => { requests.push(input.replace('/api', '')); return answer() }))
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => { const url = input.replace('/api', ''); if (url !== '/user') requests.push(url); return answer() }))   // the account-preference lookup is not under test here
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(<QueryClientProvider client={client}><MemoryRouter><LiturgicalCalendarCard /></MemoryRouter></QueryClientProvider>)
 }
@@ -143,7 +143,7 @@ describe('the calendar card’s API request', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
     render(<QueryClientProvider client={client}><MemoryRouter><LiturgicalCalendarCard /></MemoryRouter></QueryClientProvider>)
     await screen.findByRole('heading', { name: 'St. Filler Example' })
-    const [url, init] = fetchMock.mock.calls[0]
+    const [url, init] = fetchMock.mock.calls.find(call => String(call[0]).includes('liturgical-calendar'))!
     expect(url).toBe('/api/liturgical-calendar/2026-11-10?edition=roman_1960')
     expect(init?.method).toBe('GET')
     expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer session-token')

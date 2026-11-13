@@ -415,11 +415,14 @@ class HistoryEntry(Output):
 
 
 class UserPatch(Input):
-    timezone: str
+    timezone: str | None = None
+    calendar_provider: Literal["traditional", "current"] | None = None
 
     @field_validator("timezone")
     @classmethod
     def valid_timezone(cls, value):
+        if value is None:
+            return value
         try:
             ZoneInfo(value)
         except (ValueError, ZoneInfoNotFoundError) as exc:
@@ -430,5 +433,6 @@ class UserPatch(Input):
 class UserOut(Output):
     id: UUID
     timezone: str
+    calendar_provider: Literal["traditional", "current"] | None
     created_at: datetime
     updated_at: datetime

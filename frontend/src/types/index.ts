@@ -261,6 +261,11 @@ export interface CoverStatus {
   cooldown_reason: CoverCooldownReason | null
 }
 
+export interface UserPreferences {
+  timezone: string
+  calendar_provider: 'traditional' | 'current' | null
+}
+
 export interface CoverAutoJob {
   exists: boolean
   status: 'running' | 'paused' | 'done' | null
