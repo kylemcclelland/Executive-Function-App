@@ -31,6 +31,8 @@ class User(Timestamps, Base):
     # owner claims it, so no new account can ever reach that data by signing up.
     clerk_user_id: Mapped[str | None] = mapped_column(String(255))
     timezone: Mapped[str] = mapped_column(String(100), default="UTC")
+    # Which calendar Today shows by default; NULL means the application default (traditional).
+    calendar_provider: Mapped[str | None] = mapped_column(String(20))
 
 
 class Task(Timestamps, Base):

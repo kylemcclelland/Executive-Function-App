@@ -8,6 +8,7 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { AppearanceCard } from '../components/brand/AppearanceCard'
 import { AboutCard } from '../components/brand/AboutCard'
 import { PROVIDERS, saveProvider, savedProvider, type CalendarProvider } from '../lib/calendarProvider'
+import { useQueryClient } from '@tanstack/react-query'
 import { TIMEZONE_OPTIONS, deviceZone, isValidZone, matchingOption, timezoneLabel } from '../lib/timezones'
 
 export function SettingsPage() {
@@ -40,7 +41,7 @@ function CalendarTimeCard() {
     <h2>Calendar &amp; Time</h2>
     <p className="muted">Today’s priorities follow your local date, not the server’s clock.</p>
     {query.isPending ? <Loading /> : unsupported ? <p>Timezone preferences aren’t supported by this server yet. Today uses the timezone shown on your Today page.</p> : query.isError ? <><ErrorMessage message={query.error.message} /><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></> : <TimezoneForm saved={query.data.timezone} />}
-    <LiturgicalCalendarChoice />
+    <LiturgicalCalendarChoice saved={query.data && 'calendar_provider' in query.data ? (query.data as { calendar_provider?: CalendarProvider | null }).calendar_provider : undefined} />
   </Card>
 }
 
@@ -75,14 +76,25 @@ function TimezoneForm({ saved }: { saved: string }) {
   </form>
 }
 
-function LiturgicalCalendarChoice() {
-  const [provider, setProvider] = useState<CalendarProvider>(savedProvider)
-  return <fieldset className="theme-choice calendar-choice">
-    <legend>Liturgical calendar</legend>
-    <p className="muted">The calendar shown on Today. Remembered on this device.</p>
-    {PROVIDERS.map(item => <label key={item.key} className="theme-option">
-      <input type="radio" name="calendar-provider" value={item.key} checked={provider === item.key} onChange={() => { setProvider(item.key); saveProvider(item.key) }} />
-      <span className="theme-option-label">{item.label}</span>
-    </label>)}
-  </fieldset>
+function LiturgicalCalendarChoice({ saved }: { saved?: CalendarProvider | null }) {
+  const client = useQueryClient()
+  const [fallback, setFallback] = useState<CalendarProvider>(savedProvider)
+  const action = useAction()
+  const provider = saved ?? fallback
+  function choose(next: CalendarProvider) {
+    setFallback(next)
+    saveProvider(next)                                   // the device remembers even offline
+    void action.run(() => api('/user', 'PATCH', { calendar_provider: next }), () => {
+      client.setQueryData(['user'], (old: object | undefined) => (old ? { ...old, calendar_provider: next } : old))
+    })
+  }
+  return <div>
+    <label htmlFor="default-calendar">Default Calendar</label>
+    <select id="default-calendar" className="input" value={provider} aria-describedby="default-calendar-hint"
+      onChange={e => choose(e.target.value as CalendarProvider)}>
+      {PROVIDERS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+    </select>
+    <p id="default-calendar-hint" className="muted">The calendar Today shows. Saved to your account, on every device.</p>
+    <ErrorMessage message={action.error} />
+  </div>
 }

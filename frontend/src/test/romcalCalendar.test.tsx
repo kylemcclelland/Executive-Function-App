@@ -20,7 +20,7 @@ let requests: string[]
 
 function mount(answer: () => Response | Promise<Response>) {
   requests = []
-  vi.stubGlobal('fetch', vi.fn(async (input: string) => { requests.push(input.replace('/api', '')); return answer() }))
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => { const url = input.replace('/api', ''); if (url !== '/user') requests.push(url); return answer() }))   // the account-preference lookup is not under test here
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   return render(<QueryClientProvider client={client}><MemoryRouter><LiturgicalCalendarCard /></MemoryRouter></QueryClientProvider>)
 }

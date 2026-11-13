@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Church } from 'lucide-react'
 import { Card } from '../ui'
 import { longDate, today } from '../../lib/divineOffice'
 import { ROMCAL_SOURCE, currentRomanDay, sameSaint } from '../../lib/romcalCalendar'
 import { api } from '../../services/api'
+import type { UserPreferences } from '../../types'
 import type { CalendarDay } from '../../types/liturgicalCalendar'
 import { PROVIDERS, saveProvider, savedProvider, type CalendarProvider } from '../../lib/calendarProvider'
 
@@ -17,10 +18,16 @@ export { CALENDAR_PROVIDER_KEY } from '../../lib/calendarProvider'
  */
 export function LiturgicalCalendarCard() {
   const date = today()
-  const [provider, setProviderState] = useState<CalendarProvider>(savedProvider)
+  const client = useQueryClient()
+  // The account's default calendar; the device's remembered choice covers sign-in gaps and old servers.
+  const user = useQuery({ queryKey: ['user'], queryFn: () => api<UserPreferences>('/user'), retry: false, staleTime: 5 * 60 * 1000 })
+  const [chosenHere, setChosenHere] = useState<CalendarProvider | null>(null)
+  const provider: CalendarProvider = chosenHere ?? user.data?.calendar_provider ?? savedProvider()
   const setProvider = (next: CalendarProvider) => {
-    setProviderState(next)
+    setChosenHere(next)
     saveProvider(next)
+    client.setQueryData<UserPreferences>(['user'], old => (old ? { ...old, calendar_provider: next } : old))
+    void api('/user', 'PATCH', { calendar_provider: next }).catch(() => { /* older server: the device still remembers */ })
   }
   const current = provider === 'current'
   const traditional = useQuery({

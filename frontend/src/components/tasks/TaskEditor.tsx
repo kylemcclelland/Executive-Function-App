@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../../services/api'
 import { useAction } from '../../hooks/useAction'
-import type { Milestone, Task } from '../../types'
+import type { Milestone, Project, Task } from '../../types'
 import { Button, Dialog, Input } from '../ui'
 import { ErrorMessage } from '../common'
 
@@ -20,11 +21,15 @@ export function TaskEditor({ task, projectId, milestones, initialStatus, kind, o
   const [reviewNotes, setReviewNotes] = useState(task?.review_notes ?? '')
   const [reviewerName, setReviewerName] = useState(task?.reviewer_name ?? '')
   const [milestoneId, setMilestoneId] = useState(task?.milestone_id ?? '')
+  // Any of the user's projects can hold the task; the board's current filter is only a preselection.
+  // On a project's own page (milestones provided) the project is the page itself and stays fixed.
+  const [project, setProject] = useState(task?.project_id ?? projectId ?? '')
+  const allProjects = useQuery({ queryKey: ['projects'], queryFn: () => api<Project[]>('/projects'), enabled: !milestones })
   const action = useAction()
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!title.trim()) return
-    const body = { title: title.trim(), description: description.trim() || null, next_action: nextAction.trim() || null, due_date: dueDate || null, scheduled_date: scheduledDate || null, estimated_minutes: duration ? Number(duration) : null, status, task_kind: taskKind, project_id: task?.project_id ?? projectId ?? null, blocked_reason: blockedReason.trim() || null, waiting_on: waitingOn.trim() || null, blocked_follow_up: followUp || null, review_notes: reviewNotes.trim() || null, reviewer_name: reviewerName.trim() || null, ...(milestones ? { milestone_id: milestoneId || null } : {}) }
+    const body = { title: title.trim(), description: description.trim() || null, next_action: nextAction.trim() || null, due_date: dueDate || null, scheduled_date: scheduledDate || null, estimated_minutes: duration ? Number(duration) : null, status, task_kind: taskKind, project_id: milestones ? (task?.project_id ?? projectId ?? null) : (project || null), blocked_reason: blockedReason.trim() || null, waiting_on: waitingOn.trim() || null, blocked_follow_up: followUp || null, review_notes: reviewNotes.trim() || null, reviewer_name: reviewerName.trim() || null, ...(milestones ? { milestone_id: milestoneId || null } : {}) }
     void action.run(() => api(task ? `/tasks/${task.id}` : '/tasks', task ? 'PATCH' : 'POST', body), onClose)
   }
   return <Dialog open onOpenChange={open => { if (!open && !action.pending) onClose() }} title={task ? 'Edit task' : 'New task'} description="Only a title is needed. The rest can wait.">
@@ -46,6 +51,10 @@ export function TaskEditor({ task, projectId, milestones, initialStatus, kind, o
         <label className="full">Review notes<textarea className="input" rows={2} value={reviewNotes} onChange={e => setReviewNotes(e.target.value)} placeholder="What should the reviewer look at?" /></label>
         <label className="full">Reviewer<Input value={reviewerName} maxLength={200} onChange={e => setReviewerName(e.target.value)} placeholder="Who will check it (optional)" /></label>
       </>}
+      {!milestones && <label className="full">Project<select className="input" value={project} onChange={e => setProject(e.target.value)}>
+        <option value="">No project</option>
+        {(allProjects.data ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select></label>}
       {milestones && milestones.length > 0 && <label className="full">Milestone<select className="input" value={milestoneId} onChange={e => setMilestoneId(e.target.value)}><option value="">No milestone</option>{milestones.map(milestone => <option key={milestone.id} value={milestone.id}>{milestone.title}</option>)}</select></label>}
       <div className="full"><ErrorMessage message={action.error} /></div>
       <div className="dialog-actions full"><Button variant="outline" type="button" onClick={onClose} disabled={action.pending}>Cancel</Button><Button disabled={action.pending || !title.trim()}>{action.pending ? 'Saving…' : task ? 'Save changes' : 'Create task'}</Button></div>

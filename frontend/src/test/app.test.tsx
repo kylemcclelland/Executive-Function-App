@@ -23,6 +23,7 @@ let previous: string[]
 let timezone: string
 let failPath: string
 let userUnsupported: boolean
+let calendarProvider: 'traditional' | 'current' | null
 let convertedCaptures: Set<string>
 let nextId: number
 let fetchMock: ReturnType<typeof vi.fn>
@@ -39,6 +40,7 @@ beforeEach(() => {
   timezone = 'America/New_York'
   failPath = ''
   userUnsupported = false
+  calendarProvider = null
   convertedCaptures = new Set()
   nextId = 1
   requests = []
@@ -57,9 +59,10 @@ beforeEach(() => {
     if (url === '/today/priorities') { priorities = body.task_ids; return response({}) }
     if (url === '/user') {
       if (userUnsupported) return response({ detail: 'Not found' }, 404)
-      if (method === 'PATCH') timezone = body.timezone
-      return response({ timezone })
+      if (method === 'PATCH') { if (body.timezone) timezone = body.timezone; if ('calendar_provider' in body) calendarProvider = body.calendar_provider }
+      return response({ timezone, calendar_provider: calendarProvider })
     }
+    if (url === '/projects') return response([{ id: 'p1', name: 'Homiletics', status: 'active' }])
     if (url === '/tasks' || url.startsWith('/tasks?')) {
       if (method === 'POST') { const created = task(`new-${nextId++}`, body.title, body); tasks.push(created); return response(created, 201) }
       const kind = new URL(url, 'http://local').searchParams.get('kind')
@@ -421,6 +424,24 @@ describe('Preferences, dates, and resilient navigation', () => {
     await screen.findByText('Timezone saved: Tokyo.')
     expect(timezone).toBe('Asia/Tokyo')
     expect(writes()).toEqual([{ url: '/user', method: 'PATCH', body: { timezone: 'Asia/Tokyo' } }])
+  })
+
+  it('saves the Default Calendar to the account and Today follows it', async () => {
+    const user = setup('/settings')
+    const select = await screen.findByLabelText('Default Calendar')
+    expect(select).toHaveValue('traditional')
+    await user.selectOptions(select, 'current')
+    await waitFor(() => expect(writes().at(-1)).toEqual({ url: '/user', method: 'PATCH', body: { calendar_provider: 'current' } }))
+    // Back on Today, the card opens on the chosen calendar without any further click.
+    await user.click(screen.getByRole('link', { name: 'Today' }))
+    expect(await screen.findByText('Current Roman Calendar')).toBeInTheDocument()
+  })
+
+  it('falls back to the application default when no calendar is saved', async () => {
+    calendarProvider = null
+    window.localStorage.clear()                       // a fresh device, nothing remembered
+    setup('/')
+    expect(await screen.findByText('Traditional Liturgical Calendar')).toBeInTheDocument()
   })
   it('treats the server default UTC as the listed UTC option', async () => {
     timezone = 'UTC'

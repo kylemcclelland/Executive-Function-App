@@ -408,3 +408,17 @@ def test_concurrent_priority_updates_are_atomic(client, application):
         ))
     assert all(response.status_code == 200 for response in responses)
     assert [item["id"] for item in client.get("/api/today").json()["priorities"]] in choices
+
+
+def test_the_default_calendar_preference_persists_per_account(client):
+    assert client.get("/api/user").json()["calendar_provider"] is None   # application default
+    saved = client.patch("/api/user", json={"calendar_provider": "current"}).json()
+    assert saved["calendar_provider"] == "current"
+    assert client.get("/api/user").json()["calendar_provider"] == "current"   # across sessions
+    # Changing the calendar never touches the timezone, and vice versa.
+    assert saved["timezone"] == client.patch("/api/user", json={"calendar_provider": "traditional"}).json()["timezone"]
+    kept = client.patch("/api/user", json={"timezone": "Europe/Rome"}).json()
+    assert kept["calendar_provider"] == "traditional"
+    # Unknown calendars are refused; clearing the choice returns to the default.
+    assert client.patch("/api/user", json={"calendar_provider": "julian"}).status_code == 422
+    assert client.patch("/api/user", json={"calendar_provider": None}).json()["calendar_provider"] is None
