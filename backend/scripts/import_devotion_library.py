@@ -37,7 +37,12 @@ from app.models import Devotion, PrayerText  # noqa: E402
 from app.schemas import devotions as schemas  # noqa: E402
 from app.services.devotions import record  # noqa: E402
 
-HEAD_REVISION = "0016"
+
+def head_revision() -> str:
+    """The code's own migration head, so the guard never goes stale as migrations are added."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    return ScriptDirectory.from_config(Config(str(HERE.parent / "alembic.ini"))).get_current_head()
 IMPORTED_BY = "import:devotion-library-batch-01"
 EXPECTED_TOTAL, EXPECTED_READY = 22, 19
 NEVER_IMPORT = {"prayer-of-st-ephrem", "gregory-of-narek-prayer-94-excerpt", "act-of-spiritual-communion"}
@@ -330,8 +335,9 @@ def main(argv=None) -> int:
     try:
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if arguments.execute and revision != HEAD_REVISION:
-            print(f"Refusing to write: the database is at migration {revision}, not {HEAD_REVISION}. Apply migrations first (with approval).")
+        head = head_revision()
+        if arguments.execute and revision != head:
+            print(f"Refusing to write: the database is at migration {revision}, not {head}. Apply migrations first (with approval).")
             return 2
         counts = run(arguments.package, make_session_factory(engine), arguments.execute)
     finally:
