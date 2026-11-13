@@ -9,8 +9,8 @@ import type { Project, ProjectDetail, ProjectUpdate, Task, WorkSession } from '.
 const stamp = '2026-11-06T10:00:00Z'
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 const task = (id: string, title: string): Task => ({
-  id, title, user_id: 'user', project_id: 'p1', project_name: 'Write the book', milestone_id: null, project_position: 0, description: null, status: 'todo',
-  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null, created_at: stamp, updated_at: stamp, completed_at: null, steps: [],
+  id, title, user_id: 'user', project_id: 'p1', project_name: 'Write the book', milestone_id: null, project_position: 0, description: null, status: 'todo', task_kind: 'checklist',
+  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null, previous_status: null, blocked_reason: null, waiting_on: null, blocked_follow_up: null, review_notes: null, reviewer_name: null, review_requested_at: null,  created_at: stamp, updated_at: stamp, completed_at: null, steps: [],
 })
 const session = (fields: Partial<WorkSession>): WorkSession => ({
   id: 's1', project_id: 'p1', project_name: 'Write the book', task_id: null, task_title: null, intention: 'Outline chapter two', status: 'active',

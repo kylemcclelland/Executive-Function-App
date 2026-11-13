@@ -8,8 +8,8 @@ import type { Milestone, Project, ProjectNote, ProjectUpdate, Task } from '../ty
 
 const stamp = '2026-11-06T10:00:00Z'
 const task = (id: string, title: string, fields: Partial<Task> = {}): Task => ({
-  id, title, user_id: 'user', project_id: null, project_name: null, milestone_id: null, project_position: null, description: null, status: 'todo',
-  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null, created_at: stamp, updated_at: stamp, completed_at: null, steps: [], ...fields,
+  id, title, user_id: 'user', project_id: null, project_name: null, milestone_id: null, project_position: null, description: null, status: 'todo', task_kind: 'checklist',
+  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null, previous_status: null, blocked_reason: null, waiting_on: null, blocked_follow_up: null, review_notes: null, reviewer_name: null, review_requested_at: null,  created_at: stamp, updated_at: stamp, completed_at: null, steps: [], ...fields,
 })
 const project = (id: string, name: string, fields: Partial<Project> = {}): Project => ({
   id, name, description: null, category: null, status: 'active', target_date: null, next_action: null, created_at: stamp, updated_at: stamp,

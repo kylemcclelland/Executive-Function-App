@@ -67,7 +67,7 @@ export function TodayPage() {
       <Capture />
       {!!data?.completed_tasks.length && <details className="completed-section"><summary><Check size={16} /> Completed today ({data.completed_tasks.length})</summary><Card>{data.completed_tasks.map(task => <TaskRow key={task.id} task={task} />)}</Card></details>}
     </div><aside className="day-aside"><UpcomingEvents timeZone={data?.timezone} /><ReadingCard />
-      <Link to="/inbox" className="inbox-link"><span className="small-icon"><Inbox size={20} /></span><div><strong>Inbox</strong><p>{data ? `${data.inbox_count} unprocessed ${data.inbox_count === 1 ? 'thought' : 'thoughts'} in your inbox` : 'Your inbox is here when you’re ready'}</p></div><ChevronRight size={18} /></Link>
+      <Link to="/inbox" className="inbox-link"><span className="small-icon"><Inbox size={20} /></span><div><strong>Idea Wall</strong><p>{data ? `${data.inbox_count} unprocessed ${data.inbox_count === 1 ? 'idea' : 'ideas'} on your wall` : 'Your Idea Wall is here when you’re ready'}</p></div><ChevronRight size={18} /></Link>
       {data && <p className="timezone-note">Your day follows {timezoneLabel(data.timezone)}.</p>}
       <Card className="encouragement"><span className="line-art"><Feather size={40} strokeWidth={1.1} /></span><p className="eyebrow">LUKE 10:42</p><h2 lang="la">Unum est<br />necessarium.</h2><p>One thing is necessary.<br />Give it your full attention.</p><span className="tiny-rule" /></Card>
     </aside></div>

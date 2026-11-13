@@ -5,6 +5,7 @@ import { Feather } from 'lucide-react'
 import { AppLayout } from './components/layout/AppLayout'
 import { TodayPage } from './pages/TodayPage'
 import { InboxPage } from './pages/InboxPage'
+import { TaskBoardPage } from './pages/TaskBoardPage'
 import { TasksPage } from './pages/TasksPage'
 import { FuturePage } from './pages/FuturePage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -33,6 +34,7 @@ export function AppRoutes({ profile }: { profile?: ReactNode }) {
       <Route path="/" element={<TodayPage />} />
       <Route path="/inbox" element={<InboxPage />} />
       <Route path="/tasks" element={<TasksPage />} />
+      <Route path="/board" element={<TaskBoardPage />} />
       <Route path="/calendar" element={<CalendarPage />} />
       <Route path="/projects" element={<ProjectsPage />} />
       <Route path="/projects/:projectId" element={<ProjectPage />} />

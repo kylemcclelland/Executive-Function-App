@@ -9,8 +9,8 @@ import type { InboxItem, Task } from '../types'
 import { formatDate } from '../lib/utils'
 
 const task = (id: string, title: string, fields: Partial<Task> = {}): Task => ({
-  id, title, user_id: 'user', project_id: null, project_name: null, milestone_id: null, project_position: null, description: null, status: 'todo',
-  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null,
+  id, title, user_id: 'user', project_id: null, project_name: null, milestone_id: null, project_position: null, description: null, status: 'todo', task_kind: 'checklist',
+  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null, previous_status: null, blocked_reason: null, waiting_on: null, blocked_follow_up: null, review_notes: null, reviewer_name: null, review_requested_at: null, 
   created_at: '2026-11-06T10:00:00Z', updated_at: '2026-11-06T10:00:00Z', completed_at: null, steps: [], ...fields,
 })
 const thought = (id: string, content: string, fields: Partial<InboxItem> = {}): InboxItem => ({
@@ -60,9 +60,10 @@ beforeEach(() => {
       if (method === 'PATCH') timezone = body.timezone
       return response({ timezone })
     }
-    if (url === '/tasks') {
+    if (url === '/tasks' || url.startsWith('/tasks?')) {
       if (method === 'POST') { const created = task(`new-${nextId++}`, body.title, body); tasks.push(created); return response(created, 201) }
-      return response(tasks)
+      const kind = new URL(url, 'http://local').searchParams.get('kind')
+      return response(kind ? tasks.filter(t => t.task_kind === kind) : tasks)
     }
     if (url === '/inbox') {
       if (method === 'POST') { const created = thought(`new-${nextId++}`, body.content); inbox.unshift(created); return response(created, 201) }
@@ -235,7 +236,7 @@ describe('Inbox lifecycle', () => {
     await screen.findByText('New inbox thought')
     await user.click(screen.getByRole('button', { name: /Processed 1/ }))
     await screen.findByText('Already processed')
-    expect(screen.queryByRole('button', { name: 'Make a task' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Send to Daily Checklist/ })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Archived 1/ }))
     await screen.findByText('Archived thought')
   })
@@ -246,14 +247,23 @@ describe('Inbox lifecycle', () => {
     await user.type(screen.getByRole('textbox', { name: 'Your thought' }), 'Original text\nwith context')
     await user.click(screen.getByRole('button', { name: 'Save thought' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Make a task' }))
+    await user.click(screen.getByRole('button', { name: /Send to Daily Checklist/ }))
     await waitFor(() => expect(inbox[0].status).toBe('processed'))
-    expect(writes().at(-1)).toEqual({ url: '/inbox/i1/convert-to-task', method: 'POST', body: {} })
+    expect(writes().at(-1)).toEqual({ url: '/inbox/i1/convert-to-task', method: 'POST', body: { task_kind: 'checklist' } })
     expect(tasks.at(-1)?.description).toBe('Original text\nwith context')
     await user.click(screen.getByRole('button', { name: /Processed 1/ }))
     expect(screen.getByText('Original text with context')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Make a task' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Send to Daily Checklist/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('is the Idea Wall now, and an idea can become a Task Board ticket instead', async () => {
+    const user = setup('/inbox')
+    expect(await screen.findByRole('heading', { name: 'Idea Wall' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Idea Wall/ })).toBeInTheDocument()   // navigation
+    await user.click(await screen.findByRole('button', { name: /Send to Task Board: A thought worth keeping/ }))
+    await waitFor(() => expect(writes().at(-1)).toEqual({ url: '/inbox/i1/convert-to-task', method: 'POST', body: { task_kind: 'board' } }))
+    await waitFor(() => expect(inbox[0].status).toBe('processed'))                // the idea is kept, marked processed
   })
   it('archives and restores, and deletes only after confirmation', async () => {
     const user = setup('/inbox')
@@ -282,7 +292,7 @@ describe('Inbox lifecycle', () => {
     expect(writes()[0]).toEqual({ url: '/inbox/i1', method: 'PATCH', body: { status: 'unprocessed' } })
     await user.click(screen.getByRole('button', { name: /Processed 1/ }))
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Make a task' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Send to Daily Checklist/ })).not.toBeInTheDocument()
   })
   it('archives and restores a converted tombstone without editing or reprocessing it', async () => {
     inbox = [thought('i1', 'Original after task deletion', { status: 'processed', converted_task_id: null })]
@@ -302,7 +312,7 @@ describe('Inbox lifecycle', () => {
     await user.click(screen.getByRole('button', { name: /Processed 1/ }))
     expect(screen.getByText('Original after task deletion')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Make a task' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Send to Daily Checklist/ })).not.toBeInTheDocument()
   })
   it('keeps unsaved capture text and exposes actionable server errors', async () => {
     const user = setup('/inbox')
@@ -326,7 +336,7 @@ describe('Tasks and small steps', () => {
     await user.type(screen.getByRole('textbox', { name: 'Task title' }), 'A fresh small task')
     await user.click(screen.getByRole('button', { name: 'Create task' }))
     await screen.findByRole('button', { name: 'A fresh small task' })
-    expect(writes()[0]).toEqual({ url: '/tasks', method: 'POST', body: { title: 'A fresh small task', description: null, next_action: null, due_date: null, scheduled_date: null, estimated_minutes: null, status: 'todo', project_id: null } })
+    expect(writes()[0]).toEqual({ url: '/tasks', method: 'POST', body: { title: 'A fresh small task', description: null, next_action: null, due_date: null, scheduled_date: null, estimated_minutes: null, status: 'todo', task_kind: 'checklist', project_id: null, blocked_reason: null, waiting_on: null, blocked_follow_up: null, review_notes: null, reviewer_name: null } })
   })
   it('edits all optional fields, status and next action, then clears nullable fields', async () => {
     const user = setup('/tasks')
@@ -337,10 +347,9 @@ describe('Tasks and small steps', () => {
     await user.type(screen.getByLabelText('Due date'), '2026-11-20')
     await user.type(screen.getByLabelText('Scheduled date'), '2026-11-18')
     await user.type(screen.getByRole('spinbutton', { name: 'Estimated minutes' }), '15')
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'in_progress')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(tasks[0]).toMatchObject({ description: 'Useful context', next_action: 'Write a single sentence', due_date: '2026-11-20', scheduled_date: '2026-11-18', estimated_minutes: 15, status: 'in_progress', project_id: null })
+    expect(tasks[0]).toMatchObject({ description: 'Useful context', next_action: 'Write a single sentence', due_date: '2026-11-20', scheduled_date: '2026-11-18', estimated_minutes: 15, status: 'todo', project_id: null })
     expect(screen.getByText('Write a single sentence')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Edit task: Write the first paragraph' }))
     for (const name of ['Description', 'Next small action', 'Due date', 'Scheduled date', 'Estimated minutes']) await user.clear(screen.getByLabelText(name))
@@ -455,7 +464,7 @@ describe('Preferences, dates, and resilient navigation', () => {
     expect(screen.queryByRole('button', { name: 'Save timezone' })).not.toBeInTheDocument()
   })
   it('shows load failures with a working retry', async () => {
-    failPath = '/tasks'
+    failPath = '/tasks?kind=checklist'
     const user = setup('/tasks')
     await screen.findByRole('alert')
     failPath = ''

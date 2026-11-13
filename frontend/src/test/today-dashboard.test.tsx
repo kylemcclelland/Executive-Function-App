@@ -7,8 +7,8 @@ import { AppRoutes } from '../App'
 import type { NoteBrief, Task } from '../types'
 
 const task = (id: string, title: string, fields: Partial<Task> = {}): Task => ({
-  id, title, user_id: 'u', project_id: null, project_name: null, milestone_id: null, project_position: null, description: null, status: 'todo',
-  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null,
+  id, title, user_id: 'u', project_id: null, project_name: null, milestone_id: null, project_position: null, description: null, status: 'todo', task_kind: 'checklist',
+  due_date: null, scheduled_date: null, estimated_minutes: null, next_action: null, previous_status: null, blocked_reason: null, waiting_on: null, blocked_follow_up: null, review_notes: null, reviewer_name: null, review_requested_at: null, 
   created_at: '2030-03-05T10:00:00Z', updated_at: '2030-03-05T10:00:00Z', completed_at: null, steps: [], ...fields,
 })
 const json = (data: unknown, status = 200) => new Response(status === 204 ? null : JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
