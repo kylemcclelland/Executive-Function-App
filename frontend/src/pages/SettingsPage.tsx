@@ -4,13 +4,32 @@ import { Button, Card } from '../components/ui'
 import { ErrorMessage, Loading, PageHeader } from '../components/common'
 import { api, ApiError } from '../services/api'
 import { useAction } from '../hooks/useAction'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { AppearanceCard } from '../components/brand/AppearanceCard'
 import { AboutCard } from '../components/brand/AboutCard'
 import { PROVIDERS, saveProvider, savedProvider, type CalendarProvider } from '../lib/calendarProvider'
 import { TIMEZONE_OPTIONS, deviceZone, isValidZone, matchingOption, timezoneLabel } from '../lib/timezones'
 
 export function SettingsPage() {
-  return <><PageHeader eyebrow="PREFERENCES" title="Preferences">Your day follows your local date.</PageHeader><CalendarTimeCard /><AppearanceCard /><AboutCard /></>
+  return <><PageHeader eyebrow="PREFERENCES" title="Preferences">Your day follows your local date.</PageHeader><CalendarTimeCard /><AppearanceCard /><InstallCard /><AboutCard /></>
+}
+
+/** "Install Optima Pars": a real install button where the browser offers one, Add-to-Home-Screen
+ * guidance on iOS, and nothing at all inside the installed app itself. A regular browser window
+ * cannot reliably tell that the app is installed elsewhere, so it may still show this card. */
+export function InstallCard() {
+  const { standalone, canPrompt, install, ios } = useInstallPrompt()
+  if (standalone) return null
+  return <Card className="settings-card">
+    <h2>Install Optima Pars</h2>
+    {canPrompt ? <>
+      <p className="muted">Install the app for its own window, a home-screen icon and faster starts. Your account and data stay exactly the same.</p>
+      <p><Button onClick={() => void install()}>Install Optima Pars</Button></p>
+    </> : ios ? <>
+      <p className="muted">On iPhone and iPad, install from Safari's share menu:</p>
+      <p className="muted"><strong>Share</strong> → <strong>Add to Home Screen</strong>. Other iOS browsers keep this under their own menu, and some versions label it "Add to Dock" on iPad.</p>
+    </> : <p className="muted">Your browser hasn't offered installation on this page. Chrome and Edge show an install icon in the address bar or menu; if the app is already installed, open it from where your apps live.</p>}
+  </Card>
 }
 
 /** Timezone (saved on the server, per account) and the liturgical calendar shown on Today (remembered on this device). */

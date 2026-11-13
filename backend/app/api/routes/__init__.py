@@ -73,16 +73,24 @@ def update_user(body: s.UserPatch, db: DB, user: CurrentUser):
 
 
 @router.get("/api/tasks", response_model=list[s.TaskOut])
-def list_tasks(db: DB, user: CurrentUser, status: s.Status | None = None):
+def list_tasks(
+    db: DB, user: CurrentUser, status: s.Status | None = None, kind: s.TaskKind | None = None,
+):
     statement = select(Task).where(Task.user_id == user.id)
     if status is not None:
         statement = statement.where(Task.status == status)
+    if kind is not None:
+        statement = statement.where(Task.task_kind == kind)
     return db.scalars(statement.order_by(Task.created_at.desc(), Task.id)).all()
 
 
 @router.post("/api/tasks", response_model=s.TaskOut, status_code=201)
 def create_task(body: s.TaskCreate, db: DB, user: CurrentUser):
     values = body.model_dump()
+    if values["task_kind"] == "checklist" and values["status"] not in ("todo", "completed"):
+        raise HTTPException(
+            422, "A checklist item is either to do or completed; the Task Board holds staged work.",
+        )
     values.update(link_values(db, user, values))
     task = Task(
         **values, user_id=user.id,
@@ -104,8 +112,28 @@ def read_task(task_id: UUID, db: DB, user: CurrentUser):
 def update_task(task_id: UUID, body: s.TaskPatch, db: DB, user: CurrentUser):
     task = owned_task(db, user, task_id)
     values = body.model_dump(exclude_unset=True)
+    # Moving a ticket back to the Daily Checklist simplifies its workflow to incomplete/complete:
+    # its mid-workflow status becomes plain "todo" (completed stays completed); everything else —
+    # description, dates, project, blocker and review history — is kept untouched. Asking outright
+    # for a staged status on a checklist item is refused: the checklist is binary at the API.
+    kind_after = values.get("task_kind", task.task_kind)
+    if kind_after == "checklist" and values.get("status") not in (None, "todo", "completed"):
+        raise HTTPException(
+            422, "A checklist item is either to do or completed; the Task Board holds staged work.",
+        )
+    if (
+        values.get("task_kind") == "checklist"
+        and values.get("status", task.status) not in ("todo", "completed")
+    ):
+        values["status"] = "todo"
     if "status" in values and values["status"] != task.status:
+        # Completion is the status itself: "completed" means done everywhere (Today, Projects,
+        # the board); every other status, including in_review and blocked, means unfinished.
         task.completed_at = utcnow() if values["status"] == "completed" else None
+        if values["status"] == "blocked":
+            task.previous_status = task.status      # so unblocking can offer "return to previous"
+        if values["status"] == "in_review" and task.review_requested_at is None:
+            task.review_requested_at = utcnow()
     previous_project = task.project_id
     values.update(link_values(db, user, values, task.project_id, task.milestone_id))
     for key, value in values.items():
@@ -236,6 +264,7 @@ def convert_inbox(
         user_id=user.id,
         title=(body.title if body and body.title else item.content.strip()[:300]),
         description=item.content,
+        task_kind=(body.task_kind if body else "checklist"),  # both kinds start as plain todo
     )
     db.add(task)
     db.flush()

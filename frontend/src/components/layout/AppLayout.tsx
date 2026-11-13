@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { BookOpenCheck, CalendarDays, Cross, Feather, FolderOpen, Inbox, Library, ListTodo, NotebookPen, ScrollText, Settings2, Sun } from 'lucide-react'
+import { BookOpenCheck, CalendarDays, Cross, Feather, FolderOpen, Inbox, Library, ListTodo, NotebookPen, ScrollText, Settings2, SquareKanban, Sun } from 'lucide-react'
 import { SidebarBrand } from '../brand/Brand'
 import { ThemeToggle } from '../brand/ThemeToggle'
 import { useEditorialAccess } from '../../lib/editorial'
 
 const navigation = [
-  { path: '/', label: 'Today', icon: Sun }, { path: '/inbox', label: 'Inbox', icon: Inbox },
-  { path: '/tasks', label: 'Tasks', icon: ListTodo }, { path: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { path: '/', label: 'Today', icon: Sun }, { path: '/inbox', label: 'Idea Wall', icon: Inbox },
+  { path: '/tasks', label: 'Daily Checklist', icon: ListTodo }, { path: '/board', label: 'Task Board', icon: SquareKanban }, { path: '/calendar', label: 'Calendar', icon: CalendarDays },
   { path: '/projects', label: 'Projects', icon: FolderOpen }, { path: '/library', label: 'Library', icon: Library }, { path: '/notes', label: 'Notes', icon: NotebookPen },
   { path: '/devotions', label: 'The Oratory', icon: Cross }, { path: '/rule-of-life', label: 'Rule of Life', icon: ScrollText },
 ]

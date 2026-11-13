@@ -205,13 +205,14 @@ describe('Importing from Goodreads', () => {
 })
 
 describe('Book covers', () => {
-  it('shows existing covers and a placeholder when there is none', async () => {
+  it('renders a generated cover for every book and never an image, with or without a cover URL', async () => {
     setup()
-    const withCover = await screen.findByRole('link', { name: /Meditations/ })
-    expect(withCover.querySelector('img')).toHaveAttribute('src', 'https://example.com/m.jpg')
+    const withUrl = await screen.findByRole('link', { name: /Meditations/ })
+    expect(withUrl.querySelector('img')).toBeNull()                   // stored URLs are kept, not shown
+    expect((withUrl.querySelector('.book-cover') as HTMLElement).style.backgroundColor).not.toBe('')
     const without = screen.getByRole('link', { name: /Summa Theologiae/ })
     expect(without.querySelector('img')).toBeNull()
-    expect(without.querySelector('.book-cover-fallback')).toHaveTextContent('S')
+    expect((without.querySelector('.book-cover') as HTMLElement).style.backgroundColor).not.toBe('')
   })
 
   it('offers cover lookup only when books lack covers, in small resumable batches', async () => {
@@ -315,17 +316,18 @@ describe('Book covers', () => {
     expect(requests.filter(r => r.url === '/books/covers/enrich')).toHaveLength(2)
   })
 
-  it('shows a placeholder for ISBN-addressed Open Library covers, but loads ID-addressed ones', async () => {
+  it('never requests Open Library images, whatever kind of cover URL is stored', async () => {
     books = [
       makeBook('b1', 'Hotlinked', { cover_url: 'https://covers.openlibrary.org/b/isbn/9780195093872-M.jpg' }),
       makeBook('b2', 'Steady', { cover_url: 'https://covers.openlibrary.org/b/id/8231856-M.jpg' }),
     ]
     setup()
     const hotlinked = await screen.findByRole('link', { name: /Hotlinked/ })
-    expect(hotlinked.querySelector('img')).toBeNull()                 // never requested
-    expect(hotlinked.querySelector('.book-cover-fallback')).toHaveTextContent('H')
     const steady = screen.getByRole('link', { name: /Steady/ })
-    expect(steady.querySelector('img')).toHaveAttribute('src', 'https://covers.openlibrary.org/b/id/8231856-M.jpg')
+    expect(hotlinked.querySelector('img')).toBeNull()                 // never requested
+    expect(steady.querySelector('img')).toBeNull()
+    // Each keeps its own stable generated colour instead.
+    expect((steady.querySelector('.book-cover') as HTMLElement).style.backgroundColor).not.toBe('')
   })
 
   it('tells unavailability apart from rate limiting, with a shorter wait', async () => {

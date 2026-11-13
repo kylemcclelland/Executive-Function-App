@@ -45,7 +45,7 @@ function BookDetail({ bookId, back, onDeleted }: { bookId: string; back: string;
     <Card className="book-card">
       <Link to={`/library${back}`} className="back-link"><ArrowLeft size={14} />All books</Link>
       <div className="book-head">
-        <BookCover url={book.cover_url} title={book.title} large />
+        <BookCover bookId={book.id} title={book.title} author={book.authors.length > 0 ? authorLine(book.authors) : null} size="detail" />
         <div className="book-head-text"><h2 className="book-title">{book.title}</h2>{book.authors.length > 0 && <p className="book-authors">{authorLine(book.authors)}</p>}
           <div className="task-actions"><Button variant="ghost" size="sm" aria-label={`Edit book: ${book.title}`} onClick={() => setEditing(true)}><Pencil size={14} />Edit</Button><Button variant="ghost" size="sm" aria-label={`Delete book: ${book.title}`} onClick={() => setDeleting(true)}><Trash2 size={14} />Delete</Button></div></div>
       </div>
@@ -114,7 +114,7 @@ export function LibraryPage() {
         </div>
         {query.isPending ? <Loading /> : query.isError ? <><ErrorMessage message={query.error.message} /><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></> : books.length ? <>
           <div className="book-scroll" ref={scroller} tabIndex={0} role="region" aria-label="Books"><div className="book-list">{books.map(book => <Link key={book.id} to={`/library/${book.id}${listState}`} className={`book-item ${book.id === bookId ? 'is-selected' : ''}`} aria-current={book.id === bookId ? 'true' : undefined}>
-            <BookCover url={book.cover_url} title={book.title} />
+            <BookCover bookId={book.id} title={book.title} author={book.authors.length > 0 ? authorLine(book.authors) : null} />
             <span className="book-item-text"><strong>{book.title}</strong>{book.authors.length > 0 && <span className="muted small">{authorLine(book.authors)}</span>}</span>
             <span className="count" aria-label={`${book.note_count} ${book.note_count === 1 ? 'note' : 'notes'}`}>{book.note_count}</span>
           </Link>)}</div></div>

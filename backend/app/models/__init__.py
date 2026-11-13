@@ -36,7 +36,11 @@ class User(Timestamps, Base):
 class Task(Timestamps, Base):
     __tablename__ = "tasks"
     __table_args__ = (
-        CheckConstraint("status IN ('todo','in_progress','completed')", name="task_status"),
+        CheckConstraint(
+            "status IN ('todo','in_progress','in_review','blocked','completed')",
+            name="task_status",
+        ),
+        CheckConstraint("task_kind IN ('checklist','board')", name="task_kind"),
         CheckConstraint("estimated_minutes IS NULL OR estimated_minutes > 0", name="task_estimate"),
         Index("ix_tasks_user_scheduled", "user_id", "scheduled_date"),
     )
@@ -52,10 +56,22 @@ class Task(Timestamps, Base):
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="todo")
+    # Which surface manages the task: the Daily Checklist (quick, binary) or the Task Board.
+    task_kind: Mapped[str] = mapped_column(
+        String(10), default="checklist", server_default="checklist",
+    )
     due_date: Mapped[date | None]
     scheduled_date: Mapped[date | None]
     estimated_minutes: Mapped[int | None]
     next_action: Mapped[str | None] = mapped_column(Text)
+    # Board workflow: where a blocked task came from, why it waits, and its review trail.
+    previous_status: Mapped[str | None] = mapped_column(String(20))
+    blocked_reason: Mapped[str | None] = mapped_column(Text)
+    waiting_on: Mapped[str | None] = mapped_column(String(300))
+    blocked_follow_up: Mapped[date | None]
+    review_notes: Mapped[str | None] = mapped_column(Text)
+    reviewer_name: Mapped[str | None] = mapped_column(String(200))
+    review_requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     steps: Mapped[list["Step"]] = relationship(
         back_populates="task", cascade="all, delete-orphan",

@@ -14,7 +14,8 @@ from pydantic import (
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 Content = Annotated[str, StringConstraints(min_length=1, max_length=100000)]
-Status = Literal["todo", "in_progress", "completed"]
+Status = Literal["todo", "in_progress", "in_review", "blocked", "completed"]
+TaskKind = Literal["checklist", "board"]
 ProjectStatus = Literal["active", "paused", "someday", "completed"]
 Intention = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 
@@ -40,10 +41,16 @@ class TaskCreate(Input):
     title: Title
     description: str | None = Field(default=None, max_length=100000)
     status: Status = "todo"
+    task_kind: TaskKind = "checklist"
     due_date: date | None = None
     scheduled_date: date | None = None
     estimated_minutes: int | None = Field(default=None, gt=0, le=525600)
     next_action: str | None = Field(default=None, max_length=100000)
+    blocked_reason: str | None = Field(default=None, max_length=2000)
+    waiting_on: str | None = Field(default=None, max_length=300)
+    blocked_follow_up: date | None = None
+    review_notes: str | None = Field(default=None, max_length=10000)
+    reviewer_name: str | None = Field(default=None, max_length=200)
 
 
 class TaskPatch(Input):
@@ -52,14 +59,20 @@ class TaskPatch(Input):
     title: Title | None = None
     description: str | None = Field(default=None, max_length=100000)
     status: Status | None = None
+    task_kind: TaskKind | None = None
     due_date: date | None = None
     scheduled_date: date | None = None
     estimated_minutes: int | None = Field(default=None, gt=0, le=525600)
     next_action: str | None = Field(default=None, max_length=100000)
+    blocked_reason: str | None = Field(default=None, max_length=2000)
+    waiting_on: str | None = Field(default=None, max_length=300)
+    blocked_follow_up: date | None = None
+    review_notes: str | None = Field(default=None, max_length=10000)
+    reviewer_name: str | None = Field(default=None, max_length=200)
 
     @model_validator(mode="after")
     def non_null_required(self):
-        for field in ("title", "status"):
+        for field in ("title", "status", "task_kind"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
@@ -100,10 +113,18 @@ class TaskOut(Output):
     title: str
     description: str | None
     status: Status
+    task_kind: TaskKind
     due_date: date | None
     scheduled_date: date | None
     estimated_minutes: int | None
     next_action: str | None
+    previous_status: Status | None
+    blocked_reason: str | None
+    waiting_on: str | None
+    blocked_follow_up: date | None
+    review_notes: str | None
+    reviewer_name: str | None
+    review_requested_at: datetime | None
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
@@ -152,6 +173,7 @@ class InboxOut(Output):
 
 class ConvertInput(Input):
     title: Title | None = None
+    task_kind: TaskKind = "checklist"   # where the idea goes: the Daily Checklist or the Task Board
 
 
 class PrioritiesInput(Input):

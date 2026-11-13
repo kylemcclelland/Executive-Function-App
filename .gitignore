@@ -21,3 +21,6 @@ backups/
 optima-pars-*.sqlite
 optima-pars-*.manifest.json
 *.sqlite.partial
+
+.vercel
+.env*

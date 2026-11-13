@@ -15,16 +15,26 @@ export interface Task {
   project_position: number | null
   title: string
   description: string | null
-  status: 'todo' | 'in_progress' | 'completed'
+  status: TaskStatus
+  task_kind: 'checklist' | 'board'
   due_date: string | null
   scheduled_date: string | null
   estimated_minutes: number | null
   next_action: string | null
+  previous_status: TaskStatus | null
+  blocked_reason: string | null
+  waiting_on: string | null
+  blocked_follow_up: string | null
+  review_notes: string | null
+  reviewer_name: string | null
+  review_requested_at: string | null
   created_at: string
   updated_at: string
   completed_at: string | null
   steps: Step[]
 }
+
+export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'blocked' | 'completed'
 
 export interface InboxItem {
   id: string

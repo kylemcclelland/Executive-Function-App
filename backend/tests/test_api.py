@@ -39,7 +39,7 @@ def test_task_crud_all_fields_completion_and_reopen(client):
     created = task(
         client, "  Plan lunch  ", project_id=project, description="Details",
         due_date="2026-11-08", scheduled_date="2026-11-07",
-        estimated_minutes=15, next_action="Open menu",
+        estimated_minutes=15, next_action="Open menu", task_kind="board",
     )
     assert created["title"] == "Plan lunch"
     assert created["project_id"] == project
