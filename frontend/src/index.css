@@ -455,11 +455,17 @@ h1{letter-spacing:.005em;line-height:1.2}.brand-name{font-weight:700;letter-spac
 .calendar-choice>p{grid-column:1/-1}
 
 /* ---- Task Board: five full-height columns over the one task list ----
-   The page is a flex column filling the viewport below the topline; the board takes whatever the
-   heading and tools leave, columns stretch to that height (empty ones too), and each column's
-   cards scroll on their own beneath an always-visible header. The global footer sits just below
-   the fold, reachable with one scroll and never overlapped. */
-.board-page{display:flex;flex-direction:column;height:calc(100dvh - var(--topline-h));min-height:420px}
+   The board page turns its ancestors into a height-constrained flex chain (via :has), so the
+   board always ends exactly at the viewport bottom whatever chrome surrounds it — desktop
+   sidebar, the mobile top bar, or the installed app — with no measured pixel offsets. The board
+   takes whatever the heading and tools leave, columns stretch to that height (empty ones too),
+   each column's cards scroll on their own beneath an always-visible header, and the footer sits
+   visibly beneath the board, never overlapped. Browsers without :has degrade to a normal page. */
+.app-shell:has(.board-page){height:100dvh;min-height:0;overflow-x:hidden}
+.app-shell:has(.board-page) .main-content{display:flex;flex-direction:column;height:100%;min-height:0}
+.app-shell:has(.board-page) .topline{flex-shrink:0}
+.app-shell:has(.board-page) .page-footer{flex-shrink:0;margin:12px 0 10px}
+.board-page{display:flex;flex-direction:column;flex:1;min-height:260px}
 .board-page .page-header,.board-tools{flex-shrink:0}
 .board-tools{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}.board-tools .input{max-width:260px}
 .board{flex:1;min-height:0;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(230px,1fr);gap:12px;overflow-x:auto;overflow-y:hidden;padding-bottom:10px}
@@ -478,3 +484,4 @@ h1{letter-spacing:.005em;line-height:1.2}.brand-name{font-weight:700;letter-spac
 .board-card-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.board-card-delete{margin-left:auto;width:26px;height:26px;min-height:26px;color:var(--ink-soft)}.board-card-delete:hover{color:var(--danger)}
 .board-status{font-size:12px;padding:3px 6px;height:auto;max-width:130px}
 @media (max-width: 760px){.board{grid-auto-columns:80vw}}
+@media (max-width: 650px){.app-shell:has(.board-page){display:flex;flex-direction:column}.app-shell:has(.board-page) .sidebar{flex-shrink:0;min-width:0;width:100%}.app-shell:has(.board-page) .main-content{flex:1;height:auto;min-height:0}.board-page .page-header{padding-bottom:16px}}
