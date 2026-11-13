@@ -48,6 +48,25 @@ class Settings(BaseSettings):
     divinum_officium_path: str | None = None
     divinum_officium_perl: str = "perl"
     divinum_officium_perl5lib: str | None = None
+    # Web Push (VAPID), both base64url: the application-server keypair browsers subscribe against.
+    # The private key lives only in this environment variable; it is never stored or logged.
+    vapid_public_key: str | None = None
+    vapid_private_key: SecretStr | None = None
+    # Contact URI (mailto: or https:) a push service may use to reach the operator.
+    vapid_subject: str | None = None
+    # The master switch for the scheduled-reminder dispatcher. Off by default everywhere: a live
+    # sender becomes operational only by deliberately setting PUSH_DELIVERY_ENABLED=true.
+    push_delivery_enabled: bool = False
+    # A reminder older than this is never sent late; its attempt is marked expired instead.
+    push_reminder_expiry_minutes: int = 30
+    # How long one dispatcher run owns a claimed attempt (also the base of the retry backoff).
+    push_claim_lease_seconds: int = 120
+    # Temporary failures (429/5xx/network) are retried at most this many times.
+    push_max_attempts: int = 5
+    # The verified Clerk user id (`sub`, "user_...") of the application's owner: the only account
+    # allowed to use the editorial dashboard. Unset means nobody — editorial access stays closed
+    # until the owner is deliberately configured. Never an email, never the first user to sign up.
+    owner_clerk_user_id: str | None = None
     cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173", "http://127.0.0.1:5173",
     ]
@@ -71,7 +90,8 @@ class Settings(BaseSettings):
 
     @field_validator(
         "clerk_secret_key", "clerk_jwt_key", "google_client_id", "google_client_secret",
-        "google_token_encryption_key", mode="before",
+        "google_token_encryption_key", "vapid_public_key", "vapid_private_key", "vapid_subject",
+        "owner_clerk_user_id", mode="before",
     )
     @classmethod
     def blank_is_unset(cls, value):
@@ -98,6 +118,11 @@ class Settings(BaseSettings):
     @property
     def clerk_configured(self) -> bool:
         return self.clerk_secret_key is not None or self.clerk_jwt_key is not None
+
+    @property
+    def push_configured(self) -> bool:
+        """Browsers can subscribe. Delivery additionally needs the Phase 2 sender."""
+        return bool(self.vapid_public_key and self.vapid_private_key)
 
     @property
     def authorized_parties(self) -> list[str]:

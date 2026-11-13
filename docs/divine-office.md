@@ -203,7 +203,7 @@ Three roles, as CSS tokens in `frontend/src/index.css` (`--font-display`, `--fon
 ## What remains
 
 * An independent check of the output against a printed 1960 Breviary or Ordo, for a wider range of dates.
-* Packaging: a production deploy would need Perl, the checkout and its dependencies on the server (a container image), or a build-time export of the days needed. Not done; local only.
+* Packaging: the production image (`backend/Dockerfile`) downloads GitHub's archive of the pinned commit, refuses it unless its SHA-256 matches, and keeps only `web/cgi-bin/horas`, `web/cgi-bin/DivinumOfficium`, `web/www/horas` and `web/www/Tabulae` (`backend/scripts/fetch_divinum_officium.py`, about 176 MB). Debian's `perl` and `libcgi-pm-perl` supply the interpreter and the one non-core module the engine imports; the image sets `DIVINUM_OFFICIUM_PATH=/opt/divinum-officium`, and `UPSTREAM_COMMIT` beside the checkout stands in for git when reporting the commit. All engine tests pass against the trimmed archive.
 * Matins is long (up to 117 KB of engine HTML on a I class feast): responses are cached in memory (64 entries) but each first request runs the engine (about 0.4 to 0.8 s here).
 * Season names are derived from the engine's season code by prefix (a label only; the raw code is returned too). Resumed Sundays after Epiphany in October to
   December are labelled "Time after Pentecost (Sundays after Epiphany resumed)".

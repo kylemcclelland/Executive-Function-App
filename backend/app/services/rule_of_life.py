@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from ..divine_office import service
 from ..models import Devotion, RuleOfLifeEntry, RuleOfLifeOccurrence, SavedOfficeUnit, User
+from . import devotions as devotions_service
 
 MAX_WINDOW_DAYS = 62
 HOURS = {h["slug"]: h for h in service.HOURS}
@@ -146,8 +147,8 @@ def resolve(db: Session, user: User, kind: str, ref: str) -> str:
             raise HTTPException(422, "Unknown or unavailable Office hour")
         return HOURS[ref]["name"]
     devotion = db.scalar(select(Devotion).where(Devotion.slug == ref))
-    if devotion is None:
-        raise HTTPException(404, "Prayer not found")
+    if devotion is None or not devotions_service.library_visible(devotion):
+        raise HTTPException(404, "Prayer not found")        # an unpublished draft is not schedulable
     return devotion.title
 
 

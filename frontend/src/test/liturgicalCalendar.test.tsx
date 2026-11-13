@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { LiturgicalCalendarCard } from '../components/today/LiturgicalCalendarCard'
 import { isoDate } from '../lib/divineOffice'
 import type { CalendarDay } from '../types/liturgicalCalendar'
+import { setTokenSource } from '../services/api'
 
 // Neutral fixtures shaped like the server's answer; the real celebrations and descriptions come from the engine, never from the front end.
 const engine = { name: 'Divinum Officium', url: 'https://github.com/DivinumOfficium/divinum-officium', commit: 'abcdef0123456789abcdef0123456789abcdef01', version: 'Rubrics 1960 - 1960' }
@@ -129,5 +130,28 @@ describe('the Traditional Liturgical Calendar card', () => {
   it('has no title attribute when nothing was corrected', async () => {
     mount(() => json(saint))
     expect(await screen.findByRole('heading', { name: 'St. Filler Example' })).not.toHaveAttribute('title')
+  })
+})
+
+describe('the calendar card’s API request', () => {
+  afterEach(() => setTokenSource(null))
+
+  it('is a GET to /api/liturgical-calendar/{date} through the shared client, carrying the Clerk session token', async () => {
+    setTokenSource(async () => 'session-token')
+    const fetchMock = vi.fn(async (_input: string, _init?: RequestInit) => json(saint))
+    vi.stubGlobal('fetch', fetchMock)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+    render(<QueryClientProvider client={client}><MemoryRouter><LiturgicalCalendarCard /></MemoryRouter></QueryClientProvider>)
+    await screen.findByRole('heading', { name: 'St. Filler Example' })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/liturgical-calendar/2026-11-10?edition=roman_1960')
+    expect(init?.method).toBe('GET')
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer session-token')
+  })
+
+  it('shows a plain unavailable notice for a 404 (an API without the route) and invents nothing', async () => {
+    mount(() => json({ detail: 'Not Found' }, 404))
+    expect(await screen.findByText('The traditional calendar is unavailable right now. Your day is unaffected.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
   })
 })

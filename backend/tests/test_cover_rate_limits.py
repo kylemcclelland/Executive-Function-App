@@ -96,9 +96,10 @@ def test_retry_after_understands_seconds_and_http_dates():
         assert covers.parse_retry_after(junk, now) is None, junk
 
 
-@pytest.mark.parametrize("code", [429, 503])
+@pytest.mark.parametrize("code", [429, 403, 503])
 def test_lookup_reads_retry_after_from_the_response(monkeypatch, code):
-    expected = covers.RATE_LIMITED if code == 429 else covers.UNAVAILABLE
+    # Open Library's documented over-limit answer is 403 Forbidden; it is treated like a 429.
+    expected = covers.UNAVAILABLE if code == 503 else covers.RATE_LIMITED
 
     def fake(request, timeout=None):
         raise http_error(code, "120")

@@ -49,6 +49,25 @@ prayer texts exist, and no editor or approver role is set). Vercel redeployed th
 A token minted through Clerk's API has no `azp` and is correctly rejected, so authenticated checks need a browser on an authorized origin.
 `backup_postgres.py` now backs up a database that is one migration behind the code (the state just before migrating).
 
+### Traditional calendar and Divine Office in production (prepared, not deployed)
+
+Before this change the image had neither Perl nor Divinum Officium, so `/api/liturgical-calendar/*` and `/api/divine-office/*` could only answer 503 even on a
+current build (the running Nov 9 image predates both routes and answers 404). The Dockerfile now builds the pinned engine in (see `docs/divine-office.md`).
+No Railway variable is needed: the image sets `DIVINUM_OFFICIUM_PATH` itself. Do not set `DIVINUM_OFFICIUM_PATH` on Railway, which would override it.
+
+Deploying it also deploys everything since Nov 9 and migrates Neon from 0010 to 0016 at start-up (one transaction; every upgrade is additive: new tables,
+nullable columns, and 0011's replaced CHECK constraints, which only relax for `proposed` texts). The older image runs on the newer schema, so rolling back the
+deployment needs no database change. **Never run `alembic downgrade`**: the 0011 downgrade deletes texts without wording.
+
+1. Build locally first: `docker build -t optima-api backend` then
+   `docker run --rm --entrypoint python optima-api -c "from datetime import date; from app.divine_office import calendar, engine; print(calendar.calendar(engine.EngineConfig('/opt/divinum-officium'), date(2026, 11, 10)).celebration)"`
+   which must print `St. Andrew Avellino`.
+2. A verified Neon backup at revision 0010 (`backup_postgres.py`), and note the restore command.
+3. `railway up --service api` from `backend/`. Watch the logs for `Running upgrade 0015 -> 0016` and uvicorn starting.
+4. Check: `/health` 200; `/api/liturgical-calendar/2026-11-10` without a token is 401 (not 404); signed in on optimapars.com, Today shows the traditional
+   celebration with its engine commit `e3e0894e…`, and the Current Roman calendar still works (computed in the browser, unaffected).
+5. A second verified backup at revision 0016.
+
 Known exposure: the Railway API host is public (Vercel cannot reach a private network). It serves only `/health` without a valid Clerk token issued for the staging origin, and it has no API docs. If you want it closed further, add an origin shared secret checked by the backend.
 
 ## 1. Can we start on the Vercel subdomain? (investigated)

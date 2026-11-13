@@ -81,6 +81,23 @@ def get_user(request: Request, db: DB) -> User:
 CurrentUser = Annotated[User, Depends(get_user)]
 
 
+def require_owner(request: Request, db: DB) -> User:
+    """The application's one configured owner; everyone else is 403.
+
+    Ownership is the server-side OWNER_CLERK_USER_ID setting compared with the verified token's
+    stable Clerk id — never an email, a request field, or "the first user". Unset means closed:
+    with no owner configured, no account (not even a signed-in one) has editorial access.
+    """
+    user = get_user(request, db)
+    owner = request.app.state.settings.owner_clerk_user_id
+    if not owner or user.clerk_user_id != owner:
+        raise HTTPException(403, "Editorial access is restricted to the owner")
+    return user
+
+
+Owner = Annotated[User, Depends(require_owner)]
+
+
 def owned_task(db: Session, user: User, task_id: UUID) -> Task:
     task = db.scalar(select(Task).where(Task.id == task_id, Task.user_id == user.id))
     if task is None:

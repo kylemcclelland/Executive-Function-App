@@ -251,6 +251,20 @@ export interface CoverStatus {
   cooldown_reason: CoverCooldownReason | null
 }
 
+export interface CoverAutoJob {
+  exists: boolean
+  status: 'running' | 'paused' | 'done' | null
+  waiting: boolean
+  books_checked: number
+  covers_found: number
+  without_cover: number
+  errors: number
+  remaining: number | null
+  next_run_at: string | null
+  last_progress_at: string | null
+  last_error: string | null
+}
+
 export type BookSort = 'title' | 'title_desc' | 'recent' | 'year_desc' | 'year_asc'
 
 export interface BookPage {

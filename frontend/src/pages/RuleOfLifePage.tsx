@@ -4,10 +4,12 @@ import { Bell, BellOff, HandHeart, Pause, Pencil, Play, Plus, Trash2 } from 'luc
 import { Button, Card } from '../components/ui'
 import { ConfirmDelete, Empty, ErrorMessage, Loading, PageHeader } from '../components/common'
 import { RuleEntryForm } from '../components/ruleOfLife/RuleEntryForm'
+import { NotificationSettings } from '../components/ruleOfLife/NotificationSettings'
 import { api } from '../services/api'
 import { useAction } from '../hooks/useAction'
 import { clockLabel, describeRecurrence, entryLink, kindLabel, useMarkOccurrence, useRuleEntries, useRuleOccurrences } from '../lib/ruleOfLife'
 import { isoDate } from '../lib/divineOffice'
+import { timezoneLabel } from '../lib/timezones'
 import type { RuleEntry } from '../types/ruleOfLife'
 
 /** The user's Rule of Life: their scheduled prayers in the order of the day, with the same entries shown on the Calendar. */
@@ -36,7 +38,7 @@ export function RuleOfLifePage() {
               <span className="rule-time">{clockLabel(entry.local_time)}</span>
               <div className="rule-main">
                 {entry.available ? <Link className="rule-title" to={entryLink(entry, today)}>{entry.title}</Link> : <span className="rule-title">{entry.title}</span>}
-                <small>{kindLabel(entry.kind)} · {describeRecurrence(entry)} · {entry.timezone}</small>
+                <small>{kindLabel(entry.kind)} · {describeRecurrence(entry)} · {timezoneLabel(entry.timezone)}</small>
                 <small className="rule-notify-status">{entry.notify ? <><Bell size={11} aria-hidden="true" /> Reminder on (not delivered yet)</> : <><BellOff size={11} aria-hidden="true" /> No reminder</>}{!entry.active && ' · Paused'}{!entry.available && ' · This prayer is no longer available'}</small>
                 {occurrence && <span className="rule-today">Today: {occurrence.status ? (occurrence.status === 'completed' ? 'Completed' : 'Skipped') : 'not yet marked'}
                   <button type="button" className="prayer-mark" aria-pressed={occurrence.status === 'completed'} onClick={() => mark.mutate({ entryId: entry.id, date: today, status: occurrence.status === 'completed' ? null : 'completed' })}>Completed</button>
@@ -51,6 +53,7 @@ export function RuleOfLifePage() {
           })}
         </ul><ErrorMessage message={pause.error} />
         <p className="muted rule-note"><HandHeart size={13} aria-hidden="true" /> Marking a prayer completed or skipped is only for you: there are no streaks or scores.</p></Card>}
+    <NotificationSettings />
     {adding && <RuleEntryForm onClose={() => setAdding(false)} />}
     {editing && <RuleEntryForm entry={editing} onClose={closeEdit} />}
     {removing && <ConfirmDelete title={removing.title} onDelete={() => api(`/rule-of-life/${removing.id}`, 'DELETE')} onClose={() => setRemoving(null)} />}

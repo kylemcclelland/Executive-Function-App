@@ -382,6 +382,7 @@ a.event-title:hover{text-decoration:underline;text-underline-offset:3px}
 .rule-title{font-family:var(--font-serif);font-size:18px;color:var(--green-deep);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}span.rule-title{text-decoration:none;color:var(--ink)}
 .rule-notify-status{display:inline-flex;align-items:center;gap:4px}.rule-today{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--ink-soft)}
 .rule-actions{display:flex;flex-wrap:wrap;gap:2px;justify-content:flex-end}.rule-note{display:flex;align-items:center;gap:6px;margin-top:14px}.rule-back{color:var(--green-deep);text-decoration:underline;text-underline-offset:3px;margin-left:6px}
+.rule-settings-title{font-family:var(--font-display);font-size:1.05rem;color:var(--green-deep);margin:0 0 8px}
 .rule-weekdays{display:flex;flex-wrap:wrap;gap:6px 14px;border:1px solid var(--gold-line);border-radius:var(--radius-sm);padding:8px 12px;margin:0}.rule-weekday{display:inline-flex;align-items:center;gap:5px}.rule-notify small{color:var(--ink-soft)}
 @media (max-width:650px){.rule-entry{flex-wrap:wrap;gap:8px}.rule-time{flex-basis:100%}.rule-main{flex-basis:100%}.rule-actions{justify-content:flex-start}.event-prayer{flex-wrap:wrap}}
 
@@ -420,3 +421,31 @@ h1{letter-spacing:.005em;line-height:1.2}.brand-name{font-weight:700;letter-spac
 .rule-option small{margin-left:6px;font-style:italic;color:var(--ink-soft)}.rule-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 12px}.rule-scroll{display:block;max-height:240px;overflow-y:auto;border:1px solid var(--gold-line);border-radius:var(--radius-sm);padding:0 12px}
 .rule-search{font-size:13px}.rule-more{margin-top:10px}.rule-more summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-size:14px;color:var(--green-deep)}.rule-notify{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px;color:var(--ink)}
 .rule-form .form-grid{margin-top:0}.rule-form .input{min-height:44px;font-size:16px}.rule-form .dialog-actions .button{min-height:44px}
+
+/* Editorial dashboard (owner only) */
+.editorial-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}.editorial-filters .input{flex:1 1 140px;min-width:120px}
+.editorial-batch{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.editorial-open{background:none;border:none;padding:0;cursor:pointer;text-align:left;font:inherit;color:var(--green-deep);text-decoration:underline;text-underline-offset:3px}
+.editorial-summary{display:flex;align-items:center;gap:6px;margin:0}
+.editorial-nav{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.editorial-texts{display:grid;gap:18px;margin:14px 0}.editorial-texts.two{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.editorial-prayer{white-space:pre-wrap;font-family:var(--font-body,serif);font-size:1.02rem;line-height:1.65;background:transparent;border-left:3px solid var(--gold);padding:4px 0 4px 14px;margin:6px 0}
+.editorial-prose{white-space:pre-wrap}
+.editorial-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px 18px;margin:10px 0}.editorial-facts dt{font-weight:600;color:var(--green-deep)}.editorial-facts dd{margin:0}
+.editorial-sources{margin:6px 0;padding-left:18px}
+.editorial-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 8px}
+.editorial-detail h3{font-family:var(--font-display);color:var(--green-deep);font-size:1rem;margin:16px 0 4px}
+
+/* Sidebar: navigation labels in Almendra (restrained display face), and the desktop sidebar scrolls rather than clipping its lower links. */
+@media(min-width:651px){.sidebar{overflow-y:auto;overscroll-behavior:contain}}
+.sidebar nav .nav-link{font-family:var(--font-display);font-size:15px;line-height:1.25;letter-spacing:.01em}
+.sidebar nav .nav-link.active{font-weight:700}
+@media(max-width:650px){.sidebar nav .nav-link{font-size:13px}}
+
+/* Preferences: Calendar & Time */
+.calendar-time-card select.input{cursor:pointer}
+.calendar-time-card #timezone-hint{margin:-10px 0 14px}
+.timezone-device{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-bottom:14px}
+.theme-choice.calendar-choice{margin:28px 0 0;border-top:1px solid var(--line-strong);padding-top:20px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.calendar-choice legend{font-weight:600;font-size:15px;color:var(--ink);padding:20px 0 0}
+.calendar-choice>p{grid-column:1/-1}

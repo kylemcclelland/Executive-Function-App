@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Feather } from 'lucide-react'
 import { AppLayout } from './components/layout/AppLayout'
@@ -20,6 +20,7 @@ import { DevotionPreviewPage } from './pages/DevotionPreviewPage'
 import { DivineOfficePage } from './pages/DivineOfficePage'
 import { SavedOfficePage } from './pages/SavedOfficePage'
 import { RuleOfLifePage } from './pages/RuleOfLifePage'
+import { EditorialDashboardPage } from './pages/EditorialDashboardPage'
 import { SignInPage, SignUpPage } from './auth/AuthPages'
 import { RequireAuth } from './auth/RequireAuth'
 import { AccountControls } from './auth/AccountControls'
@@ -45,8 +46,10 @@ export function AppRoutes({ profile }: { profile?: ReactNode }) {
       <Route path="/divine-office" element={<DivineOfficePage />} />
       <Route path="/divine-office/saved/:id" element={<SavedOfficePage />} />
       <Route path="/rule-of-life" element={<RuleOfLifePage />} />
+      <Route path="/editorial" element={<EditorialDashboardPage />} />
       <Route path="/devotions/:slug" element={<DevotionPage />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/preferences" element={<Navigate to="/settings" replace />} />
       <Route path="*" element={<FuturePage name="Page not found" icon={Feather} description="That page doesn’t exist. Head back to Today." />} />
     </Routes>
   </AppLayout>

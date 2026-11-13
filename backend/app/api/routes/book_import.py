@@ -6,7 +6,7 @@ from sqlalchemy import select
 from ...db import utcnow
 from ...models import Book
 from ...schemas import imports as schemas
-from ...services import covers
+from ...services import cover_jobs, covers
 from ...services.goodreads import (
     MAX_BYTES,
     GoodreadsFormatError,
@@ -171,3 +171,38 @@ def enrich_covers(body: schemas.CoverEnrichRequest, request: Request):
     user_id = current_user_id(request)
     skip: list[UUID] = body.skip
     return covers.enrich_covers(request.app.state.session_factory, user_id, body.limit, skip)
+
+
+@router.get("/covers/auto", response_model=schemas.CoverAutoOut)
+def auto_enrichment_status(db: DB, user: CurrentUser):
+    """The user's resumable enrichment job: progress, what is left, and when the worker will
+    try again. The job runs on the server's schedule, so the browser may close at any time."""
+    return cover_jobs.job_view(cover_jobs.get_job(db, user.id), db, utcnow())
+
+
+@router.post("/covers/auto/start", response_model=schemas.CoverAutoOut)
+def start_auto_enrichment(request: Request, db: DB, user: CurrentUser):
+    """Start (or restart) automatic enrichment. The scheduled worker takes it from here: it
+    honours Open Library's cooldowns, backs off when the service struggles, and stops by itself
+    when every book with an ISBN has been answered."""
+    cover_jobs.start_job(request.app.state.session_factory, user.id)
+    db.expire_all()
+    return cover_jobs.job_view(cover_jobs.get_job(db, user.id), db, utcnow())
+
+
+@router.post("/covers/auto/pause", response_model=schemas.CoverAutoOut)
+def pause_auto_enrichment(request: Request, db: DB, user: CurrentUser):
+    """Pause the job. Everything learned so far is kept; resume continues where it stopped."""
+    if not cover_jobs.set_status(request.app.state.session_factory, user.id, cover_jobs.PAUSED):
+        raise HTTPException(404, "There is no enrichment job to pause")
+    db.expire_all()
+    return cover_jobs.job_view(cover_jobs.get_job(db, user.id), db, utcnow())
+
+
+@router.post("/covers/auto/resume", response_model=schemas.CoverAutoOut)
+def resume_auto_enrichment(request: Request, db: DB, user: CurrentUser):
+    """Resume a paused job; the next worker pass picks it up."""
+    if not cover_jobs.set_status(request.app.state.session_factory, user.id, cover_jobs.RUNNING):
+        raise HTTPException(404, "There is no enrichment job to resume")
+    db.expire_all()
+    return cover_jobs.job_view(cover_jobs.get_job(db, user.id), db, utcnow())

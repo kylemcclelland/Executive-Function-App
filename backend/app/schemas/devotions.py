@@ -244,6 +244,9 @@ class DevotionDetail(DevotionBrief):
     instructions: list[str]
     steps: list[StepOut]
     choice_label: str | None = None
+    # Discovery metadata from imported research packages (themes, tradition, durations); NULL for
+    # devotions created before it existed.
+    discovery: dict | None = None
     texts: list[ReaderText]
 
 

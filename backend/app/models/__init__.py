@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -389,6 +390,37 @@ class CoverServiceState(Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
+class CoverEnrichmentJob(Base):
+    """A user's resumable cover-enrichment job: the worker continues it until nothing is left.
+
+    One row per user. ``next_run_at`` is when the worker may touch it again (a cooldown, a backoff,
+    or right now); ``claimed_until`` is a bounded lease so two worker passes can never run the same
+    job at once. ``skip_ids`` carries forward the book ids each batch finished with, exactly as the
+    interactive endpoint does. Counters only ever grow; completed work survives any failure.
+    """
+
+    __tablename__ = "cover_enrichment_jobs"
+    __table_args__ = (
+        CheckConstraint("status IN ('running','paused','done')", name="cover_job_status"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    status: Mapped[str] = mapped_column(String(10), default="running")
+    books_checked: Mapped[int] = mapped_column(Integer, default=0)
+    covers_found: Mapped[int] = mapped_column(Integer, default=0)
+    without_cover: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[int] = mapped_column(Integer, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    unavailable_streak: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(120))
+    skip_ids: Mapped[list] = mapped_column(JSON, default=list)
+    next_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    claimed_until: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    last_progress_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
 class DailyPriority(Base):
     __tablename__ = "daily_priorities"
     __table_args__ = (
@@ -458,6 +490,9 @@ class Devotion(Timestamps, Base):
     choice_label: Mapped[str | None] = mapped_column(String(60))
     # Where the explanatory prose came from, e.g. "ai_draft": shown as unapproved until approved.
     prose_origin: Mapped[str | None] = mapped_column(String(40))
+    # Research/discovery metadata for imported prayers (themes, tradition, focus, durations,
+    # provenance). Free-form JSON so the editorial schema stays untouched; NULL for older rows.
+    discovery: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(20), default="proposed")
     created_by: Mapped[str] = mapped_column(String(255))
     source_verified_by: Mapped[str | None] = mapped_column(String(255))
@@ -613,6 +648,73 @@ class RuleOfLifeEntry(Timestamps, Base):
     notify: Mapped[bool] = mapped_column(default=False)
     active: Mapped[bool] = mapped_column(default=True)
     fingerprint: Mapped[str] = mapped_column(String(300))
+
+
+class PushSubscription(Timestamps, Base):
+    """One browser's Web Push subscription, owned by one user. Holds no VAPID private key.
+
+    The endpoint URL and encryption keys are exactly what the browser's PushManager issued; we
+    store nothing else about the device. ``endpoint_hash`` (SHA-256 of the endpoint) carries the
+    uniqueness constraint, since endpoints can exceed index limits. An endpoint identifies one
+    browser profile globally, so re-registering it (even from another signed-in account) moves it
+    rather than duplicating it. ``failure_count``/``last_failure_at`` let the Phase 2 sender
+    retire dead subscriptions; nothing reads them yet.
+    """
+
+    __tablename__ = "push_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("endpoint_hash", name="uq_push_subscription_endpoint"),
+        Index("ix_push_subscriptions_user", "user_id"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    endpoint: Mapped[str] = mapped_column(String(2000))
+    endpoint_hash: Mapped[str] = mapped_column(String(64))
+    # Browser-generated ECDH public key and auth secret (base64url), used only to encrypt pushes.
+    p256dh: Mapped[str] = mapped_column(String(512))
+    auth: Mapped[str] = mapped_column(String(512))
+    failure_count: Mapped[int] = mapped_column(default=0)
+    last_failure_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # Set when the push service said the subscription is gone (404/410); the row is kept for the
+    # audit trail but is never sent to again. The browser can simply re-subscribe.
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+
+ATTEMPT_STATUSES = ("pending", "delivered", "failed", "expired")
+
+
+class PushDeliveryAttempt(Timestamps, Base):
+    """One reminder owed to one browser for one prayer occurrence; the dispatcher's work queue.
+
+    The unique constraint makes a duplicate dispatch *claim* impossible; `claimed_until` is a
+    bounded lease so two overlapping dispatcher runs never own the same attempt and a crashed
+    run's claims expire on their own. After a temporary failure the same column is the backoff
+    timer. "delivered" means the push service accepted the message — not that the device showed
+    it; Web Push is at-least-once under retries, deduplicated on the device by the notification
+    tag. No payload, endpoint or secret is stored: only the outcome.
+    """
+
+    __tablename__ = "push_delivery_attempts"
+    __table_args__ = (
+        UniqueConstraint("entry_id", "occurrence_date", "subscription_id", name="uq_push_attempt"),
+        Index("ix_push_attempts_status_due", "status", "due_at"),
+        Index("ix_push_attempts_user", "user_id"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    entry_id: Mapped[UUID] = mapped_column(
+        ForeignKey("rule_of_life_entries.id", ondelete="CASCADE"),
+    )
+    subscription_id: Mapped[UUID] = mapped_column(
+        ForeignKey("push_subscriptions.id", ondelete="CASCADE"),
+    )
+    occurrence_date: Mapped[date] = mapped_column()
+    due_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    status: Mapped[str] = mapped_column(String(12), default="pending")
+    attempt_count: Mapped[int] = mapped_column(default=0)
+    claimed_until: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    # A status code or exception class name only — never an endpoint, key or payload.
+    last_error: Mapped[str | None] = mapped_column(String(300))
 
 
 class RuleOfLifeOccurrence(Base):
